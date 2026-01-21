@@ -254,6 +254,14 @@ with tab_map:
         hover_name="Country",
         hover_data={"Regulation_Count": True, "Latest_10": True, "Country": False},
     )
+
+    fig.update_geos(
+    scope="asia",
+    showcountries=True,
+    showcoastlines=True,
+    fitbounds="locations",
+    )
+
     fig.update_layout(margin=dict(l=0, r=0, t=0, b=0), height=520)
     st.plotly_chart(fig, use_container_width=True)
 
