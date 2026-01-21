@@ -102,11 +102,12 @@ def build_coverage_matrix(df: pd.DataFrame, treat_partial_as_covered=True) -> pd
 # =========================
 # Load data (file upload to avoid hardcoding paths)
 # =========================
-uploaded = st.file_uploader("Upload Excel file (.xlsx)", type=["xlsx"])
+# uploaded = st.file_uploader("Upload Excel file (.xlsx)", type=["xlsx"])
 
-if not uploaded:
-    st.info("Upload your Excel file to begin.")
-    st.stop()
+# if not uploaded:
+#     st.info("Upload your Excel file to begin.")
+#     st.stop()
+uploaded_file = "202601_Regulatory Comparison Matrix_test.xlsx"
 
 @st.cache_data
 def load_first_sheet(uploaded_file) -> pd.DataFrame:
