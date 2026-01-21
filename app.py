@@ -19,7 +19,7 @@ DATA_FILE = "CBregs.xlsx"
 # Helpers
 # =========================
 ASEAN_FLAG = {
-    "Brunei": "🇧🇳",
+    "Brunei Darussalam": "🇧🇳",
     "Cambodia": "🇰🇭",
     "Indonesia": "🇮🇩",
     "Lao PDR": "🇱🇦",
