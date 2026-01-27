@@ -305,14 +305,28 @@ with tab_map:
     # Neutral shading (no ranking): single constant value
     by_country["_fill"] = 1
     
+    # fig = px.choropleth(
+    #     by_country,
+    #     locations="Country",
+    #     locationmode="country names",
+    #     color="_fill",  # constant -> no meaningful gradient
+    #     hover_name="Country",
+    #     hover_data={"Latest_10": True, "Country": False},  # remove Regulation_Count from hover too
+    # )
+
     fig = px.choropleth(
-        by_country,
-        locations="Country",
-        locationmode="country names",
-        color="_fill",  # constant -> no meaningful gradient
-        hover_name="Country",
-        hover_data={"Latest_10": True, "Country": False},  # remove Regulation_Count from hover too
+    by_country,
+    locations="Country",
+    locationmode="country names",
+    color="_fill",
+    custom_data=["Latest_10"],     # <-- add this
     )
+
+    fig.update_traces(
+    hovertemplate="%{location}<br>%{customdata[0]}<extra></extra>"
+    )
+
+    
     
     # Remove legend/colorbar entirely |dispable box/lasso zoom
     fig.update_layout(
