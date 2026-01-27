@@ -361,7 +361,7 @@ with tab_map:
 # TABLE TAB
 # =========================
 with tab_table:
-    st.subheader("Table")
+    st.subheader("")
 
     # Build per-country summary table:
     # columns: Flag, Country (with Regulator), counts per each worksheet name
