@@ -373,96 +373,189 @@ with tab_map:
 # =========================
 # TABLE TAB
 # =========================
-with tab_table:
-    # st.subheader("")
+# with tab_table:
+#     # st.subheader("")
 
-    # Build per-country summary table:
-    # columns: Flag, Country (with Regulator), counts per each worksheet name
+#     # Build per-country summary table:
+#     # columns: Flag, Country (with Regulator), counts per each worksheet name
+#     all_sheet_names = sorted(df_all["Category"].dropna().unique().tolist())
+
+#     regs_by_country = (
+#         df_f.groupby("Country_std")["Regulator_std"]
+#         .apply(lambda x: ", ".join(sorted(set([v for v in x.dropna().tolist()]))))
+#         .reset_index()
+#         .rename(columns={"Country_std": "Country", "Regulator_std": "Regulator"})
+#     )
+
+#     # counts = (
+#     #     df_f.groupby(["Country_std", "Category"])
+#     #     .size()
+#     #     .reset_index(name="Count")
+#     #     .pivot(index="Country_std", columns="Category", values="Count")
+#     #     .fillna(0)
+#     #     .astype(int)
+#     #     .reset_index()
+#     #     .rename(columns={"Country_std": "Country"})
+#     # )
+
+#     counts = (
+#     df_f.groupby(["Country_std", "Category"])
+#     .size()
+#     .reset_index(name="Count")
+#     .assign(HasReg=True)  # anything present becomes True
+#     .pivot(index="Country_std", columns="Category", values="HasReg")
+#     .fillna(False)
+#     .astype(bool)
+#     .reset_index()
+#     .rename(columns={"Country_std": "Country"})
+#     )    
+
+#     t = regs_by_country.merge(counts, on="Country", how="outer").fillna({"Regulator": ""})
+#     for s in all_sheet_names:
+#         if s not in t.columns:
+#             # t[s] = 0
+#             t[s] = False
+
+#     t.insert(0, "Flag", t["Country"].map(lambda x: ASEAN_FLAG.get(str(x), "🏳️")))
+#     t = t[["Flag", "Country", "Regulator"] + all_sheet_names].sort_values("Country")
+
+#     # Use dataframe selection; show preview + open modal
+#     st.caption("Select a row to preview and open a country popup.")
+#     # event = st.dataframe(
+#     #     t,
+#     #     use_container_width=True,
+#     #     hide_index=True,
+#     #     on_select="rerun",
+#     #     selection_mode="single-row",
+#     #     height=520,
+#     # )
+
+#     CHECK = "✓"
+#     BLANK = ""
+
+#     for s in all_sheet_names:
+#         t[s] = t[s].map(lambda x: CHECK if x else BLANK)
+
+#     event = st.dataframe(
+#     t,
+#     use_container_width=True,
+#     hide_index=True,
+#     on_select="rerun",
+#     selection_mode="single-row",
+#     height=520,
+#     )
+
+
+#     if event and event.selection and event.selection.get("rows"):
+#         idx = event.selection["rows"][0]
+#         selected_country = t.iloc[idx]["Country"]
+#         st.session_state["selected_country"] = selected_country
+
+#         # Preview
+#         st.markdown(f"### Preview: {selected_country}")
+#         latest10 = latest_regs_by_country(df_f, selected_country, n=10)
+#         if latest10.empty:
+#             st.info("No regulations found for this country under the current filters.")
+#         else:
+#             preview_lines = []
+#             for _, r in latest10.iterrows():
+#                 y = r["Year"]
+#                 y_txt = str(int(y)) if pd.notna(y) else "—"
+#                 preview_lines.append(f"- **{y_txt}** — {r['Regulation_Title']}")
+#             st.markdown("\n".join(preview_lines))
+
+with tab_table:
     all_sheet_names = sorted(df_all["Category"].dropna().unique().tolist())
 
-    regs_by_country = (
-        df_f.groupby("Country_std")["Regulator_std"]
-        .apply(lambda x: ", ".join(sorted(set([v for v in x.dropna().tolist()]))))
-        .reset_index()
-        .rename(columns={"Country_std": "Country", "Regulator_std": "Regulator"})
-    )
+    # =========================================================
+    # MODE A: Category = All -> keep your current summary matrix
+    # =========================================================
+    if sel_category == "All":
+        regs_by_country = (
+            df_f.groupby("Country_std")["Regulator_std"]
+            .apply(lambda x: ", ".join(sorted(set([v for v in x.dropna().tolist()]))))
+            .reset_index()
+            .rename(columns={"Country_std": "Country", "Regulator_std": "Regulator"})
+        )
 
-    # counts = (
-    #     df_f.groupby(["Country_std", "Category"])
-    #     .size()
-    #     .reset_index(name="Count")
-    #     .pivot(index="Country_std", columns="Category", values="Count")
-    #     .fillna(0)
-    #     .astype(int)
-    #     .reset_index()
-    #     .rename(columns={"Country_std": "Country"})
-    # )
+        counts = (
+            df_f.groupby(["Country_std", "Category"])
+            .size()
+            .reset_index(name="Count")
+            .assign(HasReg=True)
+            .pivot(index="Country_std", columns="Category", values="HasReg")
+            .fillna(False)
+            .astype(bool)
+            .reset_index()
+            .rename(columns={"Country_std": "Country"})
+        )
 
-    counts = (
-    df_f.groupby(["Country_std", "Category"])
-    .size()
-    .reset_index(name="Count")
-    .assign(HasReg=True)  # anything present becomes True
-    .pivot(index="Country_std", columns="Category", values="HasReg")
-    .fillna(False)
-    .astype(bool)
-    .reset_index()
-    .rename(columns={"Country_std": "Country"})
-    )    
+        t = regs_by_country.merge(counts, on="Country", how="outer").fillna({"Regulator": ""})
+        for s in all_sheet_names:
+            if s not in t.columns:
+                t[s] = False
 
-    t = regs_by_country.merge(counts, on="Country", how="outer").fillna({"Regulator": ""})
-    for s in all_sheet_names:
-        if s not in t.columns:
-            # t[s] = 0
-            t[s] = False
+        t.insert(0, "Flag", t["Country"].map(lambda x: ASEAN_FLAG.get(str(x), "🏳️")))
+        t = t[["Flag", "Country", "Regulator"] + all_sheet_names].sort_values("Country")
 
-    t.insert(0, "Flag", t["Country"].map(lambda x: ASEAN_FLAG.get(str(x), "🏳️")))
-    t = t[["Flag", "Country", "Regulator"] + all_sheet_names].sort_values("Country")
+        CHECK, BLANK = "✓", ""
+        for s in all_sheet_names:
+            t[s] = t[s].map(lambda x: CHECK if x else BLANK)
 
-    # Use dataframe selection; show preview + open modal
-    st.caption("Select a row to preview and open a country popup.")
-    # event = st.dataframe(
-    #     t,
-    #     use_container_width=True,
-    #     hide_index=True,
-    #     on_select="rerun",
-    #     selection_mode="single-row",
-    #     height=520,
-    # )
+        st.caption("Select a row to preview and open a country popup.")
+        event = st.dataframe(
+            t,
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
+            height=520,
+        )
 
-    CHECK = "✓"
-    BLANK = ""
+        if event and event.selection and event.selection.get("rows"):
+            idx = event.selection["rows"][0]
+            selected_country = t.iloc[idx]["Country"]
+            st.session_state["selected_country"] = selected_country
 
-    for s in all_sheet_names:
-        t[s] = t[s].map(lambda x: CHECK if x else BLANK)
+            st.markdown(f"### Preview: {selected_country}")
+            latest10 = latest_regs_by_country(df_f, selected_country, n=10)
+            if latest10.empty:
+                st.info("No regulations found for this country under the current filters.")
+            else:
+                preview_lines = []
+                for _, r in latest10.iterrows():
+                    y = r["Year"]
+                    y_txt = str(int(y)) if pd.notna(y) else "—"
+                    preview_lines.append(f"- **{y_txt}** — {r['Regulation_Title']}")
+                st.markdown("\n".join(preview_lines))
 
-    event = st.dataframe(
-    t,
-    use_container_width=True,
-    hide_index=True,
-    on_select="rerun",
-    selection_mode="single-row",
-    height=520,
-    )
+    # =========================================================
+    # MODE B: Category selected -> show actual worksheet columns
+    # =========================================================
+    else:
+        st.caption(f"Showing worksheet fields for: {sel_category}")
 
+        d = df_f.copy()  # already filtered to sel_category earlier in your code
 
-    if event and event.selection and event.selection.get("rows"):
-        idx = event.selection["rows"][0]
-        selected_country = t.iloc[idx]["Country"]
-        st.session_state["selected_country"] = selected_country
+        # Show actual worksheet columns; drop std/helper cols to avoid name collisions (Country/Regulator/Year exist already)
+        drop_cols = {"Category", "Country_std", "Regulator_std", "Year_raw", "Source_URL"}
+        d = d.drop(columns=[c for c in drop_cols if c in d.columns], errors="ignore")
 
-        # Preview
-        st.markdown(f"### Preview: {selected_country}")
-        latest10 = latest_regs_by_country(df_f, selected_country, n=10)
-        if latest10.empty:
-            st.info("No regulations found for this country under the current filters.")
-        else:
-            preview_lines = []
-            for _, r in latest10.iterrows():
-                y = r["Year"]
-                y_txt = str(int(y)) if pd.notna(y) else "—"
-                preview_lines.append(f"- **{y_txt}** — {r['Regulation_Title']}")
-            st.markdown("\n".join(preview_lines))
+        # Optional: make official source clickable if that column exists
+        column_config = {}
+        if "Official Source" in d.columns:
+            column_config["Official Source"] = st.column_config.LinkColumn("Official Source", display_text="Source")
+        elif "Official source" in d.columns:
+            column_config["Official source"] = st.column_config.LinkColumn("Official source", display_text="Source")
+
+        st.dataframe(
+            d,
+            use_container_width=True,
+            hide_index=True,
+            height=560,
+            column_config=column_config,
+        )
+
 
 # =========================
 # Country popup (modal)
