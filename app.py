@@ -190,7 +190,7 @@ if df_all.empty:
 st.sidebar.header("Filters")
 
 categories = ["All"] + sorted(df_all["Category"].dropna().unique().tolist())
-sel_category = st.sidebar.selectbox("Category (worksheet)", options=categories, index=0)
+sel_category = st.sidebar.selectbox("Category", options=categories, index=0)
 
 df_f = df_all.copy()
 if sel_category != "All":
@@ -371,7 +371,7 @@ with tab_table:
         df_f.groupby("Country_std")["Regulator_std"]
         .apply(lambda x: ", ".join(sorted(set([v for v in x.dropna().tolist()]))))
         .reset_index()
-        .rename(columns={"Country_std": "Country", "Regulator_std": "Regulator(s)"})
+        .rename(columns={"Country_std": "Country", "Regulator_std": "Regulator"})
     )
 
     # counts = (
@@ -397,14 +397,14 @@ with tab_table:
     .rename(columns={"Country_std": "Country"})
     )    
 
-    t = regs_by_country.merge(counts, on="Country", how="outer").fillna({"Regulator(s)": ""})
+    t = regs_by_country.merge(counts, on="Country", how="outer").fillna({"Regulator": ""})
     for s in all_sheet_names:
         if s not in t.columns:
             # t[s] = 0
             t[s] = False
 
     t.insert(0, "Flag", t["Country"].map(lambda x: ASEAN_FLAG.get(str(x), "🏳️")))
-    t = t[["Flag", "Country", "Regulator(s)"] + all_sheet_names].sort_values("Country")
+    t = t[["Flag", "Country", "Regulator + all_sheet_names].sort_values("Country")
 
     # Use dataframe selection; show preview + open modal
     st.caption("Select a row to preview and open a country popup.")
@@ -466,7 +466,7 @@ def country_dialog(country: str):
 
     # Quick header info
     regs = sorted(set([x for x in d["Regulator_std"].dropna().tolist()]))
-    st.markdown("**Regulator(s):** " + (", ".join(regs) if regs else "—"))
+    st.markdown("**Regulator:** " + (", ".join(regs) if regs else "—"))
     st.markdown(f"**Total regulations (rows):** {len(d):,}")
 
     # Show grouped by category
