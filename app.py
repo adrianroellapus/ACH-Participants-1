@@ -10,7 +10,7 @@ import streamlit as st
 # App config
 # =========================
 st.set_page_config(page_title="ASEAN Regulatory Dashboard", layout="wide")
-st.title("ASEAN Regulatory Dashboard (dev 2.0)")
+st.title("ASEAN Regulatory Dashboard (v2)")
 
 DATA_FILE = "CBregs.xlsx"  
 
