@@ -341,24 +341,25 @@ with tab_map:
         fitbounds="locations",
         projection_type="mercator",
         showcountries=True,
-        countrycolor="rgba(255,255,255,0.85)",
+        countrycolor="white",            # string OK
         showcoastlines=True,
-        coastlinecolor="rgba(60, 78, 97, 0.55)",
+        coastlinecolor="rgba(60,78,97,0.55)",  # keep RGBA for alpha
         showland=True,
-        landcolor="#DDEBC8",
+        landcolor="#DDEBC8",             # 6-digit hex
         showocean=True,
-        oceancolor="#A9D6E5",
+        oceancolor="#A9D6E5",            # 6-digit hex
         showlakes=True,
-        lakecolor="#BEE1F2)",
-        bgcolor="rgba(0,0,0,0)",
+        lakecolor="#BEE1F2",             # 6-digit hex
+        bgcolor="rgba(0,0,0,0)",         # keep RGBA for transparent background
     )
-    
+
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=0, r=0, t=0, b=0),
         height=560,
     )
+
 
     st.plotly_chart(fig, use_container_width=True)
 
