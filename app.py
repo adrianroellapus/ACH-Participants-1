@@ -332,7 +332,7 @@ with tab_map:
         hoverlabel=dict(align="left"),
         dragmode=False,
         hovermode='closest',
-        coloraxis_showscale=False
+        coloraxis_showscale=False,
         xaxis=dict(fixedrange=True),
         yaxis=dict(fixedrange=True))
     
