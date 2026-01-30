@@ -578,7 +578,7 @@ with tab_table:
         t = t[["Flag", "Country", "Regulator"] + [col for col in t.columns if col not in ["Flag", "Country", "Regulator"]]].sort_values("Country").dropna(axis=1, how="all")
 
         CHECK, BLANK = "✓", ""
-        for s in all_sheet_names:
+        for s in [col for col in t.columns if col not in ["Flag", "Country", "Regulator"]:
             t[s] = t[s].map(lambda x: CHECK if x else BLANK)
 
         st.caption("Select a row to preview and open a country popup.")
