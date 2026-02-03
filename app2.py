@@ -13,15 +13,6 @@ st.set_page_config(
     layout="wide"
 )
 
-col1, col2 = st.columns([1, 13])
-
-with col1:
-    st.image("bsp_logo.png", width=100)
-
-with col2:
-    st.markdown("## ACH Participants Dashboard")
-    st.caption("Source: BancNet / PCHC")
-
 DATA_FILE = Path("ACHdata.xlsx")
 
 # =========================
@@ -41,17 +32,21 @@ def load_participant_sheets(
 
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
-        # ---- Robust "as of" extraction ----
+        # ---- Extract robust "as of YYYY-MM-DD"
         first_row = raw.iloc[0].dropna().astype(str).tolist()
         joined = " ".join(first_row)
 
         subtitle = ""
-        m = re.search(r"as of\s*[:\-]?\s*([0-9]{4}-[0-9]{2}-[0-9]{2})", joined, re.IGNORECASE)
+        m = re.search(
+            r"as of\s*[:\-]?\s*([0-9]{4}-[0-9]{2}-[0-9]{2})",
+            joined,
+            re.IGNORECASE
+        )
         if m:
             subtitle = f"as of {m.group(1)}"
 
-        # ---- Actual data starts at row 2 ----
         headers = raw.iloc[1].astype(str).str.strip().tolist()
+
         df = raw.iloc[2:].copy()
         df.columns = headers
         df = df.dropna(how="all")
@@ -85,19 +80,32 @@ active_sheet = st.radio(
 subtitle, df = sheets_data[active_sheet]
 
 # =========================
-# Sidebar filters (per tab)
+# HEADER (Supervisor changes #4 and #5)
+# =========================
+col1, col2 = st.columns([1, 13])
+
+with col1:
+    st.image("bsp_logo.png", width=100)
+
+with col2:
+    st.markdown("## ACH Participants Dashboard")
+    if subtitle:
+        st.caption(subtitle)
+
+st.subheader(active_sheet)
+
+# =========================
+# Sidebar filters
 # =========================
 with st.sidebar:
     st.markdown(f"### {active_sheet} Filters")
 
-    # Category filter (Sender/Receiver OR Issuer/Acquirer)
     if "Category" in df.columns:
         cats = sorted(df["Category"].dropna().unique())
         sel_cats = st.multiselect("Category", cats, default=cats)
     else:
         sel_cats = None
 
-    # Institution Type filter
     if "Institution Type" in df.columns:
         inst_types = sorted(df["Institution Type"].dropna().unique())
         sel_inst_types = st.multiselect("Institution Type", inst_types, default=inst_types)
@@ -121,24 +129,19 @@ if search:
     dff = dff[dff["Institution"].str.contains(search, case=False, na=False)]
 
 # =========================
-# Header
-# =========================
-st.subheader(active_sheet)
-if subtitle:
-    st.caption(subtitle)
-
-# =========================
-# Summary table
+# Summary table (Supervisor change #1, #2, #3)
 # =========================
 INST_TYPE_SHORT = {
-    "Universal and Commercial Banks (U/KBs)": "U/KBs",
+    "Universal and Commercial Banks (U/KBs)": "UKBs",  # renamed
     "Thrift Banks (TBs)": "TBs",
-    "Rural Banks (RBs)": "RBs",
+    "Rural Banks (RBs)": "RBs",  # will relabel display below
     "Digital Banks": "DBs",
     "Electronic Money Issuers (EMI) - Others": "EMI-NBFI",
 }
 
-if {"Category", "Institution Type"}.issubset(dff.columns):
+# Hide summary if search is active
+if not search and {"Category", "Institution Type"}.issubset(dff.columns):
+
     summary = (
         dff.groupby(["Category", "Institution Type"])
         .size()
@@ -167,6 +170,9 @@ if {"Category", "Institution Type"}.issubset(dff.columns):
     st.markdown("### Summary by Institution Type and Category")
     st.dataframe(pivot, use_container_width=True)
 
+elif search:
+    st.info("Summary hidden while searching. Clear search to restore summary.")
+
 st.divider()
 
 # =========================
@@ -174,7 +180,6 @@ st.divider()
 # =========================
 INST_TYPE_ORDER = list(INST_TYPE_SHORT.keys())
 
-# Role labels
 if active_sheet.lower().startswith("egov"):
     ROLE_MAP = {
         "Issuer": "ISSUING BANKS",
@@ -193,7 +198,13 @@ for inst_type in INST_TYPE_ORDER:
     if block.empty:
         continue
 
-    st.markdown(f"## {inst_type}")
+    # Supervisor change #3
+    display_inst_type = inst_type.replace(
+        "Rural Banks",
+        "Rural and Cooperative Banks"
+    )
+
+    st.markdown(f"## {display_inst_type}")
 
     for role_value, role_label in ROLE_MAP.items():
         role_block = block[block["Category"] == role_value]
@@ -219,7 +230,7 @@ for inst_type in INST_TYPE_ORDER:
 
     st.divider()
 
-#st.caption(
-    #"This view mirrors the official PDF layout while retaining live, "
-    #"filterable data from row-level Excel sources."
-#)
+# =========================
+# Footer (Supervisor change #5)
+# =========================
+st.caption("Source: BancNet / PCHC")
