@@ -34,13 +34,9 @@ def load_participant_sheets(
 
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
-        first_row = raw.iloc[0].dropna().astype(str).tolist()
-        joined = " ".join(first_row)
-
-        subtitle = ""
-        m = re.search(r"as of\s*[:\-]?\s*([0-9]{4}-[0-9]{2}-[0-9]{2})", joined, re.IGNORECASE)
-        if m:
-            subtitle = f"as of {m.group(1)}"
+        # Row 1: metadata
+        subtitle_parts = raw.iloc[0].dropna().astype(str).tolist()
+        subtitle = " • ".join(subtitle_parts)
 
         # Row 2: headers
         headers = raw.iloc[1].astype(str).str.strip().tolist()
@@ -183,7 +179,7 @@ if {"Category", "Institution Type"}.issubset(dff.columns):
     # Replace zeros with dash
     pivot_display = pivot.replace(0, "–")
 
-    st.markdown("### Summary by Institution Type and Category")
+    st.markdown("### Summary by Participation Role and Institution Type")
     st.dataframe(
         pivot_display,
         use_container_width=True
