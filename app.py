@@ -18,40 +18,48 @@ st.caption("Source: BancNet / PCHC")
 DATA_FILE = Path("ACHdata.xlsx")
 
 # =========================
-# Load Excel (row-level, cache-safe)
+# Load Excel (row-level, filtered sheets, cache-safe)
 # =========================
 @st.cache_data
-def load_all_sheets(xlsx_path: Path, mtime: float) -> Dict[str, Tuple[str, pd.DataFrame]]:
+def load_participant_sheets(
+    xlsx_path: Path,
+    mtime: float
+) -> Dict[str, Tuple[str, pd.DataFrame]]:
     """
     Returns:
       {
         sheet_name: (subtitle_text, dataframe)
       }
+    Only sheets ending with 'Participants' are included.
     """
     xls = pd.ExcelFile(xlsx_path, engine="openpyxl")
     data = {}
 
     for sheet in xls.sheet_names:
-        # Read entire sheet first
+        # ✅ Only include sheets ending with "Participants"
+        if not sheet.strip().endswith("Participants"):
+            continue
+
+        # Read entire sheet without headers
         raw = pd.read_excel(
             xlsx_path,
             sheet_name=sheet,
             header=None
         )
 
-        # --- Row 1: metadata (title / as-of date)
+        # ---- Row 1: metadata (tab title / as-of date)
         subtitle_parts = raw.iloc[0].dropna().astype(str).tolist()
         subtitle = " • ".join(subtitle_parts)
 
-        # --- Row 2: column headers
+        # ---- Row 2: column headers
         headers = raw.iloc[1].astype(str).str.strip().tolist()
 
-        # --- Row 3 onwards: data
+        # ---- Row 3 onwards: row-level data
         df = raw.iloc[2:].copy()
         df.columns = headers
         df = df.dropna(how="all")
 
-        # Strip column names defensively
+        # Defensive cleanup
         df.columns = [c.strip() for c in df.columns]
 
         data[sheet] = (subtitle, df)
@@ -63,14 +71,17 @@ if not DATA_FILE.exists():
     st.error("ACHdata.xlsx not found in repository root.")
     st.stop()
 
-sheets_data = load_all_sheets(DATA_FILE, DATA_FILE.stat().st_mtime)
+sheets_data = load_participant_sheets(
+    DATA_FILE,
+    DATA_FILE.stat().st_mtime
+)
 
 if not sheets_data:
-    st.error("No sheets found in ACHdata.xlsx.")
+    st.error("No '*Participants' sheets found in ACHdata.xlsx.")
     st.stop()
 
 # =========================
-# Tabs (one per sheet)
+# Tabs (one per Participants sheet)
 # =========================
 tab_names = list(sheets_data.keys())
 tabs = st.tabs(tab_names)
@@ -79,7 +90,7 @@ for tab, sheet_name in zip(tabs, tab_names):
     with tab:
         subtitle, df = sheets_data[sheet_name]
 
-        st.subheader(f"{sheet_name} ACH Participants")
+        st.subheader(f"{sheet_name}")
         if subtitle:
             st.caption(subtitle)
 
@@ -90,7 +101,7 @@ for tab, sheet_name in zip(tabs, tab_names):
         # =========================
         # EGov Pay role handling
         # =========================
-        is_egov = sheet_name.strip().lower().startswith("egov")
+        is_egov = sheet_name.lower().startswith("egov")
 
         role_col = "Role"
         role_label = "Issuer / Acquirer" if is_egov else "Participation Role"
@@ -175,5 +186,5 @@ for tab, sheet_name in zip(tabs, tab_names):
 
         st.caption(
             "Row-level data loaded from ACHdata.xlsx. "
-            "Totals are computed dynamically by the dashboard."
+            "Only worksheets ending with 'Participants' are included."
         )
