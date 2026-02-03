@@ -199,9 +199,10 @@ for inst_type in INST_TYPE_ORDER:
         continue
 
     # Supervisor change #3
-    display_inst_type = inst_type.replace(
-        "Rural Banks",
-        "Rural and Cooperative Banks"
+    display_inst_type = (
+        inst_type
+            .replace("Universal and Commercial Banks (U/KBs)", "Universal and Commercial Banks (UKBs)")
+            .replace("Rural Banks", "Rural and Cooperative Banks")
     )
 
     st.markdown(f"## {display_inst_type}")
