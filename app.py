@@ -35,4 +35,172 @@ def load_participant_sheets(
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
         # Row 1: metadata
-        subtitle_parts = raw.iloc[0]_
+        subtitle_parts = raw.iloc[0].dropna().astype(str).tolist()
+        subtitle = " • ".join(subtitle_parts)
+
+        # Row 2: headers
+        headers = raw.iloc[1].astype(str).str.strip().tolist()
+
+        # Row 3+: data
+        df = raw.iloc[2:].copy()
+        df.columns = headers
+        df = df.dropna(how="all")
+
+        df.columns = [c.strip() for c in df.columns]
+
+        data[sheet] = (subtitle, df)
+
+    return data
+
+
+if not DATA_FILE.exists():
+    st.error("ACHdata.xlsx not found in repository root.")
+    st.stop()
+
+sheets_data = load_participant_sheets(
+    DATA_FILE,
+    DATA_FILE.stat().st_mtime
+)
+
+if not sheets_data:
+    st.error("No '*Participants' sheets found.")
+    st.stop()
+
+# =========================
+# Navigation (tab replacement)
+# =========================
+sheet_names = list(sheets_data.keys())
+
+active_sheet = st.radio(
+    "",
+    sheet_names,
+    horizontal=True,
+    label_visibility="collapsed"
+)
+
+subtitle, df = sheets_data[active_sheet]
+
+# =========================
+# Sidebar (ONLY active tab)
+# =========================
+with st.sidebar:
+    st.markdown(f"### {active_sheet} Filters")
+
+    # Category = participation role
+    if "Category" in df.columns:
+        categories = sorted(df["Category"].dropna().unique())
+        sel_categories = st.multiselect(
+            "Category",
+            categories,
+            default=categories
+        )
+    else:
+        sel_categories = None
+
+    # Institution Type
+    if "Institution Type" in df.columns:
+        inst_types = sorted(df["Institution Type"].dropna().unique())
+        sel_inst_types = st.multiselect(
+            "Institution Type",
+            inst_types,
+            default=inst_types
+        )
+    else:
+        sel_inst_types = None
+
+    # Search
+    search = st.text_input("Search institution")
+
+# =========================
+# Apply filters
+# =========================
+dff = df.copy()
+
+if sel_categories is not None:
+    dff = dff[dff["Category"].isin(sel_categories)]
+
+if sel_inst_types is not None:
+    dff = dff[dff["Institution Type"].isin(sel_inst_types)]
+
+if search and "Institution" in dff.columns:
+    dff = dff[dff["Institution"].str.contains(search, case=False, na=False)]
+
+# =========================
+# Main header
+# =========================
+st.subheader(active_sheet)
+if subtitle:
+    st.caption(subtitle)
+
+# =========================
+# Summary matrix (Role × Institution Type)
+# =========================
+INST_TYPE_MAP = {
+    "U/KBs": "Universal and Commercial Banks (U/KBs)",
+    "TBs": "Thrift Banks (TBs)",
+    "RBs": "Rural Banks (RBs)",
+    "DBs": "Digital Banks",
+    "EMI-NBFI": "Electronic Money Issuers (EMI) - Others",
+}
+
+if {"Category", "Institution Type"}.issubset(dff.columns):
+
+    summary = (
+        dff
+        .groupby(["Category", "Institution Type"])
+        .size()
+        .reset_index(name="Count")
+    )
+
+    pivot = summary.pivot_table(
+        index="Category",
+        columns="Institution Type",
+        values="Count",
+        aggfunc="sum",
+        fill_value=0
+    )
+
+    # Rename columns to short labels
+    pivot = pivot.rename(
+        columns={v: k for k, v in INST_TYPE_MAP.items()}
+    )
+
+    # Ensure column order
+    pivot = pivot[[c for c in INST_TYPE_MAP.keys() if c in pivot.columns]]
+
+    # Add TOTAL column
+    pivot["TOTAL"] = pivot.sum(axis=1)
+
+    # Add TOTAL row
+    total_row = pivot.sum(axis=0).to_frame().T
+    total_row.index = ["TOTAL"]
+    pivot = pd.concat([pivot, total_row])
+
+    # Replace zeros with dash
+    pivot_display = pivot.replace(0, "–")
+
+    st.markdown("### Summary by Participation Role and Institution Type")
+    st.dataframe(
+        pivot_display,
+        use_container_width=True
+    )
+
+else:
+    st.info("Summary table not available for this sheet.")
+
+st.divider()
+
+# =========================
+# Detail table
+# =========================
+st.dataframe(
+    dff.sort_values("Institution") if "Institution" in dff.columns else dff,
+    use_container_width=True,
+    hide_index=True,
+    height=520
+)
+
+st.caption(
+    "Summary and details are derived from row-level data in ACHdata.xlsx. "
+    "Only worksheets ending with '*Participants' are included."
+)
