@@ -1,8 +1,6 @@
-import re
 from pathlib import Path
 from typing import Dict
 
-import pdfplumber
 import pandas as pd
 import streamlit as st
 
@@ -17,151 +15,111 @@ st.set_page_config(
 st.title("ACH Participants Dashboard")
 st.caption("Source: BancNet / PCHC • Data as of December 2025")
 
-# PDFs are stored in repo root
-DATA_DIR = Path(".")
-
-# Map payment streams to PDFs
-PAYMENT_STREAMS = {
-    "InstaPay": "instapay.pdf",
-    "PESONet": "pesonet.pdf",
-    # Add more later:
-    # "Bills Pay": "billspay.pdf",
-    # "eGov Pay": "egovpay.pdf",
-}
+DATA_FILE = Path("ACHdata.xlsx")
 
 # =========================
-# PDF Parsing Helpers
-# =========================
-CATEGORY_MAP = {
-    "Universal and Commercial Banks": "U/KBs",
-    "Thrift Banks": "TBs",
-    "Rural Banks": "RBs",
-    "Digital Banks": "DBs",
-    "EMI-Non-Bank Financial Institutions": "EMI-NBFI",
-}
-
-ROLE_HEADERS = {
-    "SENDER/RECEIVER": "Sender/Receiver",
-    "RECEIVER ONLY": "Receiver Only",
-    "SENDER ONLY": "Sender Only",
-}
-
-
-def normalize(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
-
-
-# =========================
-# PDF loader (cache-safe)
+# Load Excel (cache-safe)
 # =========================
 @st.cache_data
-def load_ach_pdf(pdf_path: Path, mtime: float) -> pd.DataFrame:
-    rows = []
-    current_category = None
-    current_role = None
-
-    with pdfplumber.open(str(pdf_path)) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text()
-            if not text:
-                continue
-
-            lines = [normalize(l) for l in text.split("\n") if l.strip()]
-
-            for line in lines:
-                # Detect category headers
-                for cat, short in CATEGORY_MAP.items():
-                    if cat in line:
-                        current_category = short
-
-                # Detect role headers
-                for header, role in ROLE_HEADERS.items():
-                    if line.upper().startswith(header):
-                        current_role = role
-
-                # Detect numbered institution lines
-                m = re.match(r"^\d+\.\s+(.*)", line)
-                if m and current_category and current_role:
-                    rows.append({
-                        "Institution": m.group(1).strip(),
-                        "Category": current_category,
-                        "Role": current_role
-                    })
-
-    return pd.DataFrame(rows)
-
-
-# =========================
-# Load all streams
-# =========================
-@st.cache_data
-def load_all_streams() -> Dict[str, pd.DataFrame]:
+def load_all_sheets(xlsx_path: Path, mtime: float) -> Dict[str, pd.DataFrame]:
+    xls = pd.ExcelFile(xlsx_path, engine="openpyxl")
     data = {}
 
-    for stream, filename in PAYMENT_STREAMS.items():
-        pdf_path = DATA_DIR / filename
+    for sheet in xls.sheet_names:
+        df = pd.read_excel(xls, sheet_name=sheet)
 
-        if pdf_path.exists():
-            data[stream] = load_ach_pdf(
-                pdf_path,
-                pdf_path.stat().st_mtime  # cache-busting key
-            )
+        # Basic cleanup
+        df = df.dropna(how="all").dropna(axis=1, how="all")
+        df.columns = [c.strip() for c in df.columns]
+
+        data[sheet] = df
 
     return data
 
 
-streams_data = load_all_streams()
+if not DATA_FILE.exists():
+    st.error("ACHdata.xlsx not found in repository root.")
+    st.stop()
 
-if not streams_data:
-    st.error("No PDF data files found.")
+sheets_data = load_all_sheets(DATA_FILE, DATA_FILE.stat().st_mtime)
+
+if not sheets_data:
+    st.error("No sheets found in ACHdata.xlsx.")
     st.stop()
 
 # =========================
-# Tabs per payment stream
+# Tabs (one per sheet)
 # =========================
-tabs = st.tabs(list(streams_data.keys()))
+tab_names = list(sheets_data.keys())
+tabs = st.tabs(tab_names)
 
-for tab, (stream_name, df) in zip(tabs, streams_data.items()):
+for tab, sheet_name in zip(tabs, tab_names):
     with tab:
-        st.subheader(f"{stream_name} ACH Participants")
+        df = sheets_data[sheet_name].copy()
+
+        st.subheader(f"{sheet_name} ACH Participants")
 
         if df.empty:
-            st.warning("No participants extracted from this PDF.")
+            st.warning("No data found in this sheet.")
             continue
 
         # =========================
-        # Sidebar filters
+        # Determine role labels
+        # =========================
+        is_egov = sheet_name.strip().lower() == "egov pay"
+
+        role_label = "Role"
+        role_display_name = "Issuer / Acquirer" if is_egov else "Participation Role"
+
+        # =========================
+        # Filters (ONLY for active tab)
         # =========================
         with st.sidebar:
-            st.markdown(f"### {stream_name} Filters")
+            st.markdown(f"### {sheet_name} Filters")
 
-            cats = sorted(df["Category"].unique())
-            sel_cats = st.multiselect(
-                "Institution Type",
-                options=cats,
-                default=cats,
-                key=f"{stream_name}_cat"
-            )
+            # Institution Type
+            if "Category" in df.columns:
+                cats = sorted(df["Category"].dropna().unique().tolist())
+                sel_cats = st.multiselect(
+                    "Institution Type",
+                    options=cats,
+                    default=cats,
+                    key=f"{sheet_name}_cat"
+                )
+            else:
+                sel_cats = None
 
-            roles = sorted(df["Role"].unique())
-            sel_roles = st.multiselect(
-                "Participation Role",
-                options=roles,
-                default=roles,
-                key=f"{stream_name}_role"
-            )
+            # Role filter (Sender/Receiver OR Issuer/Acquirer)
+            if role_label in df.columns:
+                roles = sorted(df[role_label].dropna().unique().tolist())
+                sel_roles = st.multiselect(
+                    role_display_name,
+                    options=roles,
+                    default=roles,
+                    key=f"{sheet_name}_role"
+                )
+            else:
+                sel_roles = None
 
+            # Search
             search = st.text_input(
                 "Search institution",
-                key=f"{stream_name}_search"
+                key=f"{sheet_name}_search"
             )
 
+        # =========================
+        # Apply filters
+        # =========================
         dff = df.copy()
-        dff = dff[dff["Category"].isin(sel_cats)]
-        dff = dff[dff["Role"].isin(sel_roles)]
 
-        if search:
-            dff = dff[dff["Institution"].str.contains(search, case=False)]
+        if sel_cats is not None:
+            dff = dff[dff["Category"].isin(sel_cats)]
+
+        if sel_roles is not None:
+            dff = dff[dff[role_label].isin(sel_roles)]
+
+        if search and "Institution" in dff.columns:
+            dff = dff[dff["Institution"].str.contains(search, case=False, na=False)]
 
         # =========================
         # KPIs
@@ -169,11 +127,15 @@ for tab, (stream_name, df) in zip(tabs, streams_data.items()):
         k1, k2, k3, k4, k5, k6 = st.columns(6)
 
         k1.metric("Total", len(dff))
+
         for col, cat in zip(
             [k2, k3, k4, k5, k6],
             ["U/KBs", "TBs", "RBs", "DBs", "EMI-NBFI"]
         ):
-            col.metric(cat, int((dff["Category"] == cat).sum()))
+            if "Category" in dff.columns:
+                col.metric(cat, int((dff["Category"] == cat).sum()))
+            else:
+                col.metric(cat, "—")
 
         st.divider()
 
@@ -181,13 +143,13 @@ for tab, (stream_name, df) in zip(tabs, streams_data.items()):
         # Table
         # =========================
         st.dataframe(
-            dff.sort_values("Institution"),
+            dff.sort_values("Institution") if "Institution" in dff.columns else dff,
             use_container_width=True,
             hide_index=True,
             height=520
         )
 
         st.caption(
-            "Parsed directly from official ACH Participants PDFs "
-            "using pdfplumber."
+            "Data loaded directly from ACHdata.xlsx. "
+            "Each tab corresponds to a worksheet."
         )
