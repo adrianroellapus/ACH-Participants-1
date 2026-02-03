@@ -34,14 +34,10 @@ def load_participant_sheets(
 
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
-        # Row 1: metadata
         subtitle_parts = raw.iloc[0].dropna().astype(str).tolist()
         subtitle = " • ".join(subtitle_parts)
 
-        # Row 2: headers
         headers = raw.iloc[1].astype(str).str.strip().tolist()
-
-        # Row 3+: data
         df = raw.iloc[2:].copy()
         df.columns = headers
         df = df.dropna(how="all")
@@ -60,10 +56,6 @@ sheets_data = load_participant_sheets(
     DATA_FILE,
     DATA_FILE.stat().st_mtime
 )
-
-if not sheets_data:
-    st.error("No '*Participants' sheets found.")
-    st.stop()
 
 # =========================
 # Navigation
@@ -116,7 +108,7 @@ if subtitle:
     st.caption(subtitle)
 
 # =========================
-# SUMMARY MATRIX
+# SUMMARY MATRIX (unchanged)
 # =========================
 INST_TYPE_MAP = {
     "U/KBs": "Universal and Commercial Banks (U/KBs)",
@@ -155,29 +147,49 @@ if {"Category", "Institution Type"}.issubset(dff.columns):
     pivot_display = pivot.replace(0, "–")
 
     st.markdown("### Summary by Participation Role and Institution Type")
-    st.dataframe(
-        pivot_display,
-        use_container_width=True
-    )
+    st.dataframe(pivot_display, use_container_width=True)
 
 st.divider()
 
 # =========================
 # PDF-style grouped layout
 # =========================
+INST_TYPE_ORDER = [
+    "Universal and Commercial Banks (U/KBs)",
+    "Thrift Banks (TBs)",
+    "Rural Banks (RBs)",
+    "Digital Banks",
+    "Electronic Money Issuers (EMI) - Others",
+]
 
-# ---- EGov Pay special case ----
+# Role labels differ ONLY for EGov
 if active_sheet.lower().startswith("egov"):
+    ROLE_MAP = {
+        "Issuer": "ISSUING BANKS",
+        "Acquirer": "ACQUIRING BANKS",
+    }
+else:
+    ROLE_MAP = {
+        "Sender/Receiver": "SENDER/RECEIVER",
+        "Sender Only": "SENDER ONLY",
+        "Receiver Only": "RECEIVER ONLY",
+    }
 
-    ROLE_ORDER = ["Issuer", "Acquirer"]
+for inst_type in INST_TYPE_ORDER:
+    block = dff[dff["Institution Type"] == inst_type]
 
-    for role in ROLE_ORDER:
-        role_block = dff[dff["Category"] == role]
+    if block.empty:
+        continue
+
+    st.markdown(f"## {inst_type}")
+
+    for role_value, role_label in ROLE_MAP.items():
+        role_block = block[block["Category"] == role_value]
 
         if role_block.empty:
             continue
 
-        st.markdown(f"## {role.upper()}")
+        st.markdown(f"**{role_label}**")
 
         table = (
             role_block[["Institution"]]
@@ -193,57 +205,9 @@ if active_sheet.lower().startswith("egov"):
             height=min(400, 35 * len(table) + 35)
         )
 
-        st.divider()
-
-# ---- All other payment streams ----
-else:
-    INST_TYPE_ORDER = [
-        "Universal and Commercial Banks (U/KBs)",
-        "Thrift Banks (TBs)",
-        "Rural Banks (RBs)",
-        "Digital Banks",
-        "Electronic Money Issuers (EMI) - Others",
-    ]
-
-    ROLE_ORDER = [
-        "Sender/Receiver",
-        "Sender Only",
-        "Receiver Only",
-    ]
-
-    for inst_type in INST_TYPE_ORDER:
-        block = dff[dff["Institution Type"] == inst_type]
-
-        if block.empty:
-            continue
-
-        st.markdown(f"## {inst_type}")
-
-        for role in ROLE_ORDER:
-            role_block = block[block["Category"] == role]
-
-            if role_block.empty:
-                continue
-
-            st.markdown(f"**{role.upper()}**")
-
-            table = (
-                role_block[["Institution"]]
-                .sort_values("Institution")
-                .reset_index(drop=True)
-            )
-            table.index = table.index + 1
-
-            st.dataframe(
-                table,
-                use_container_width=True,
-                hide_index=False,
-                height=min(400, 35 * len(table) + 35)
-            )
-
-        st.divider()
+    st.divider()
 
 st.caption(
-    "This view mirrors the official PDF layout while retaining "
-    "a live summary table derived from row-level data."
+    "This view mirrors the official PDF layout, with EGov Pay "
+    "using Issuing / Acquiring bank labels."
 )
