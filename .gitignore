@@ -10,7 +10,7 @@ venv/
 # Data (avoid committing sensitive files)
 *.xlsx
 *.csv
-*.pdf
+#*.pdf
 
 # OS
 .DS_Store
