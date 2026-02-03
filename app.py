@@ -200,7 +200,7 @@ if {"Category", "Institution Type"}.issubset(dff.columns):
     # Replace zeros with dash
     pivot_display = pivot.replace(0, "–")
 
-    st.markdown("### Summary by Participation Role and Institution Type")
+    st.markdown("### Summary by Institution Type and Category")
     st.dataframe(
         pivot_display,
         use_container_width=True
