@@ -76,7 +76,7 @@ active_sheet = st.radio(
 subtitle, df = sheets_data[active_sheet]
 
 # =========================
-# Sidebar filters (simple)
+# Sidebar (light filters)
 # =========================
 with st.sidebar:
     st.markdown(f"### {active_sheet} Filters")
@@ -105,11 +105,58 @@ if search:
     dff = dff[dff["Institution"].str.contains(search, case=False, na=False)]
 
 # =========================
-# Main header
+# Header
 # =========================
 st.subheader(active_sheet)
 if subtitle:
     st.caption(subtitle)
+
+# =========================
+# SUMMARY MATRIX (same as v1)
+# =========================
+INST_TYPE_MAP = {
+    "U/KBs": "Universal and Commercial Banks (U/KBs)",
+    "TBs": "Thrift Banks (TBs)",
+    "RBs": "Rural Banks (RBs)",
+    "DBs": "Digital Banks",
+    "EMI-NBFI": "Electronic Money Issuers (EMI) - Others",
+}
+
+if {"Category", "Institution Type"}.issubset(dff.columns):
+
+    summary = (
+        dff
+        .groupby(["Category", "Institution Type"])
+        .size()
+        .reset_index(name="Count")
+    )
+
+    pivot = summary.pivot_table(
+        index="Category",
+        columns="Institution Type",
+        values="Count",
+        aggfunc="sum",
+        fill_value=0
+    )
+
+    pivot = pivot.rename(columns={v: k for k, v in INST_TYPE_MAP.items()})
+    pivot = pivot[[c for c in INST_TYPE_MAP.keys() if c in pivot.columns]]
+
+    pivot["TOTAL"] = pivot.sum(axis=1)
+
+    total_row = pivot.sum(axis=0).to_frame().T
+    total_row.index = ["TOTAL"]
+    pivot = pd.concat([pivot, total_row])
+
+    pivot_display = pivot.replace(0, "–")
+
+    st.markdown("### Summary by Participation Role and Institution Type")
+    st.dataframe(
+        pivot_display,
+        use_container_width=True
+    )
+
+st.divider()
 
 # =========================
 # PDF-style grouped layout
@@ -149,7 +196,7 @@ for inst_type in INST_TYPE_ORDER:
             .sort_values("Institution")
             .reset_index(drop=True)
         )
-        table.index = table.index + 1  # numbering starts at 1
+        table.index = table.index + 1
 
         st.dataframe(
             table,
@@ -161,6 +208,6 @@ for inst_type in INST_TYPE_ORDER:
     st.divider()
 
 st.caption(
-    "This view mirrors the official PDF layout: "
-    "grouped by Institution Type and Participation Role."
+    "This view mirrors the official PDF layout while retaining "
+    "a live summary table derived from row-level data."
 )
