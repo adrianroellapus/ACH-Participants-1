@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Dict, Tuple
+import re
 
 import pandas as pd
 import streamlit as st
@@ -8,7 +9,7 @@ import streamlit as st
 # App config
 # =========================
 st.set_page_config(
-    page_title="ACH Participants Dashboard (PDF Style)",
+    page_title="ACH Participants Dashboard",
     layout="wide"
 )
 
@@ -34,21 +35,20 @@ def load_participant_sheets(
 
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
-        subtitle_parts = raw.iloc[0].dropna().astype(str).tolist()
+        # ---- Robust "as of" extraction ----
+        first_row = raw.iloc[0].dropna().astype(str).tolist()
+        joined = " ".join(first_row)
 
-        # Keep only the "as of" date
         subtitle = ""
-        for part in subtitle_parts:
-            if "as of" in part.lower():
-                subtitle = part.replace("00:00:00", "").strip()
-                break
+        m = re.search(r"as of\s*[:\-]?\s*([0-9]{4}-[0-9]{2}-[0-9]{2})", joined, re.IGNORECASE)
+        if m:
+            subtitle = f"as of {m.group(1)}"
 
-
+        # ---- Actual data starts at row 2 ----
         headers = raw.iloc[1].astype(str).str.strip().tolist()
         df = raw.iloc[2:].copy()
         df.columns = headers
         df = df.dropna(how="all")
-        df.columns = [c.strip() for c in df.columns]
 
         data[sheet] = (subtitle, df)
 
@@ -56,7 +56,7 @@ def load_participant_sheets(
 
 
 if not DATA_FILE.exists():
-    st.error("ACHdata.xlsx not found.")
+    st.error("ACHdata.xlsx not found in repository root.")
     st.stop()
 
 sheets_data = load_participant_sheets(
@@ -79,20 +79,24 @@ active_sheet = st.radio(
 subtitle, df = sheets_data[active_sheet]
 
 # =========================
-# Sidebar (light filters)
+# Sidebar filters (per tab)
 # =========================
 with st.sidebar:
     st.markdown(f"### {active_sheet} Filters")
 
+    # Category filter (Sender/Receiver OR Issuer/Acquirer)
     if "Category" in df.columns:
-        categories = sorted(df["Category"].dropna().unique())
-        sel_categories = st.multiselect(
-            "Category",
-            categories,
-            default=categories
-        )
+        cats = sorted(df["Category"].dropna().unique())
+        sel_cats = st.multiselect("Category", cats, default=cats)
     else:
-        sel_categories = None
+        sel_cats = None
+
+    # Institution Type filter
+    if "Institution Type" in df.columns:
+        inst_types = sorted(df["Institution Type"].dropna().unique())
+        sel_inst_types = st.multiselect("Institution Type", inst_types, default=inst_types)
+    else:
+        sel_inst_types = None
 
     search = st.text_input("Search institution")
 
@@ -101,8 +105,11 @@ with st.sidebar:
 # =========================
 dff = df.copy()
 
-if sel_categories is not None:
-    dff = dff[dff["Category"].isin(sel_categories)]
+if sel_cats is not None:
+    dff = dff[dff["Category"].isin(sel_cats)]
+
+if sel_inst_types is not None:
+    dff = dff[dff["Institution Type"].isin(sel_inst_types)]
 
 if search:
     dff = dff[dff["Institution"].str.contains(search, case=False, na=False)]
@@ -115,21 +122,19 @@ if subtitle:
     st.caption(subtitle)
 
 # =========================
-# SUMMARY MATRIX (unchanged)
+# Summary table
 # =========================
-INST_TYPE_MAP = {
-    "U/KBs": "Universal and Commercial Banks (U/KBs)",
-    "TBs": "Thrift Banks (TBs)",
-    "RBs": "Rural Banks (RBs)",
-    "DBs": "Digital Banks",
-    "EMI-NBFI": "Electronic Money Issuers (EMI) - Others",
+INST_TYPE_SHORT = {
+    "Universal and Commercial Banks (U/KBs)": "U/KBs",
+    "Thrift Banks (TBs)": "TBs",
+    "Rural Banks (RBs)": "RBs",
+    "Digital Banks": "DBs",
+    "Electronic Money Issuers (EMI) - Others": "EMI-NBFI",
 }
 
 if {"Category", "Institution Type"}.issubset(dff.columns):
-
     summary = (
-        dff
-        .groupby(["Category", "Institution Type"])
+        dff.groupby(["Category", "Institution Type"])
         .size()
         .reset_index(name="Count")
     )
@@ -142,8 +147,8 @@ if {"Category", "Institution Type"}.issubset(dff.columns):
         fill_value=0
     )
 
-    pivot = pivot.rename(columns={v: k for k, v in INST_TYPE_MAP.items()})
-    pivot = pivot[[c for c in INST_TYPE_MAP.keys() if c in pivot.columns]]
+    pivot = pivot.rename(columns=INST_TYPE_SHORT)
+    pivot = pivot[[c for c in INST_TYPE_SHORT.values() if c in pivot.columns]]
 
     pivot["TOTAL"] = pivot.sum(axis=1)
 
@@ -151,25 +156,19 @@ if {"Category", "Institution Type"}.issubset(dff.columns):
     total_row.index = ["TOTAL"]
     pivot = pd.concat([pivot, total_row])
 
-    pivot_display = pivot.replace(0, "–")
+    pivot = pivot.replace(0, "–")
 
     st.markdown("### Summary by Participation Role and Institution Type")
-    st.dataframe(pivot_display, use_container_width=True)
+    st.dataframe(pivot, use_container_width=True)
 
 st.divider()
 
 # =========================
-# PDF-style grouped layout
+# PDF-style layout
 # =========================
-INST_TYPE_ORDER = [
-    "Universal and Commercial Banks (U/KBs)",
-    "Thrift Banks (TBs)",
-    "Rural Banks (RBs)",
-    "Digital Banks",
-    "Electronic Money Issuers (EMI) - Others",
-]
+INST_TYPE_ORDER = list(INST_TYPE_SHORT.keys())
 
-# Role labels differ ONLY for EGov
+# Role labels
 if active_sheet.lower().startswith("egov"):
     ROLE_MAP = {
         "Issuer": "ISSUING BANKS",
@@ -215,6 +214,6 @@ for inst_type in INST_TYPE_ORDER:
     st.divider()
 
 #st.caption(
-    #"This view mirrors the official PDF layout, with EGov Pay "
-    #"using Issuing / Acquiring bank labels."
+    #"This view mirrors the official PDF layout while retaining live, "
+    #"filterable data from row-level Excel sources."
 #)
