@@ -202,7 +202,7 @@ for inst_type in INST_TYPE_ORDER:
     display_inst_type = (
         inst_type
             .replace("Universal and Commercial Banks (U/KBs)", "Universal and Commercial Banks (UKBs)")
-            .replace("Rural Banks", "Rural and Cooperative Banks (RBs)")
+            .replace("Rural Banks", "Rural and Cooperative Banks")
             .replace("Digital Banks", "Digital Banks (DBs)")
     )
 
