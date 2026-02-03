@@ -34,10 +34,14 @@ def load_participant_sheets(
 
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
+        # Row 1: metadata
         subtitle_parts = raw.iloc[0].dropna().astype(str).tolist()
         subtitle = " • ".join(subtitle_parts)
 
+        # Row 2: headers
         headers = raw.iloc[1].astype(str).str.strip().tolist()
+
+        # Row 3+: data
         df = raw.iloc[2:].copy()
         df.columns = headers
         df = df.dropna(how="all")
@@ -112,7 +116,7 @@ if subtitle:
     st.caption(subtitle)
 
 # =========================
-# SUMMARY MATRIX (same as v1)
+# SUMMARY MATRIX
 # =========================
 INST_TYPE_MAP = {
     "U/KBs": "Universal and Commercial Banks (U/KBs)",
@@ -161,35 +165,19 @@ st.divider()
 # =========================
 # PDF-style grouped layout
 # =========================
-INST_TYPE_ORDER = [
-    "Universal and Commercial Banks (U/KBs)",
-    "Thrift Banks (TBs)",
-    "Rural Banks (RBs)",
-    "Digital Banks",
-    "Electronic Money Issuers (EMI) - Others",
-]
 
-ROLE_ORDER = [
-    "Sender/Receiver",
-    "Sender Only",
-    "Receiver Only",
-]
+# ---- EGov Pay special case ----
+if active_sheet.lower().startswith("egov"):
 
-for inst_type in INST_TYPE_ORDER:
-    block = dff[dff["Institution Type"] == inst_type]
-
-    if block.empty:
-        continue
-
-    st.markdown(f"## {inst_type}")
+    ROLE_ORDER = ["Issuer", "Acquirer"]
 
     for role in ROLE_ORDER:
-        role_block = block[block["Category"] == role]
+        role_block = dff[dff["Category"] == role]
 
         if role_block.empty:
             continue
 
-        st.markdown(f"**{role.upper()}**")
+        st.markdown(f"## {role.upper()}")
 
         table = (
             role_block[["Institution"]]
@@ -205,7 +193,55 @@ for inst_type in INST_TYPE_ORDER:
             height=min(400, 35 * len(table) + 35)
         )
 
-    st.divider()
+        st.divider()
+
+# ---- All other payment streams ----
+else:
+    INST_TYPE_ORDER = [
+        "Universal and Commercial Banks (U/KBs)",
+        "Thrift Banks (TBs)",
+        "Rural Banks (RBs)",
+        "Digital Banks",
+        "Electronic Money Issuers (EMI) - Others",
+    ]
+
+    ROLE_ORDER = [
+        "Sender/Receiver",
+        "Sender Only",
+        "Receiver Only",
+    ]
+
+    for inst_type in INST_TYPE_ORDER:
+        block = dff[dff["Institution Type"] == inst_type]
+
+        if block.empty:
+            continue
+
+        st.markdown(f"## {inst_type}")
+
+        for role in ROLE_ORDER:
+            role_block = block[block["Category"] == role]
+
+            if role_block.empty:
+                continue
+
+            st.markdown(f"**{role.upper()}**")
+
+            table = (
+                role_block[["Institution"]]
+                .sort_values("Institution")
+                .reset_index(drop=True)
+            )
+            table.index = table.index + 1
+
+            st.dataframe(
+                table,
+                use_container_width=True,
+                hide_index=False,
+                height=min(400, 35 * len(table) + 35)
+            )
+
+        st.divider()
 
 st.caption(
     "This view mirrors the official PDF layout while retaining "
