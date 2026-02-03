@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 st.title("ACH Participants Dashboard")
-st.caption("PDF-style view • Source: BancNet / PCHC")
+st.caption("Source: BancNet / PCHC")
 
 DATA_FILE = Path("ACHdata.xlsx")
 
