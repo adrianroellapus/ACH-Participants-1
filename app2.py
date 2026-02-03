@@ -35,7 +35,14 @@ def load_participant_sheets(
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
         subtitle_parts = raw.iloc[0].dropna().astype(str).tolist()
-        subtitle = " • ".join(subtitle_parts)
+
+        # Keep only the "as of" date
+        subtitle = ""
+        for part in subtitle_parts:
+            if "as of" in part.lower():
+                subtitle = part.replace("00:00:00", "").strip()
+                break
+
 
         headers = raw.iloc[1].astype(str).str.strip().tolist()
         df = raw.iloc[2:].copy()
