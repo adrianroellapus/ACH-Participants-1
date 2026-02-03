@@ -164,7 +164,7 @@ if {"Category", "Institution Type"}.issubset(dff.columns):
 
     pivot = pivot.replace(0, "–")
 
-    st.markdown("### Summary by Participation Role and Institution Type")
+    st.markdown("### Summary by Institution Type and Category")
     st.dataframe(pivot, use_container_width=True)
 
 st.divider()
