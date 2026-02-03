@@ -207,7 +207,7 @@ for inst_type in INST_TYPE_ORDER:
 
     st.divider()
 
-st.caption(
-    "This view mirrors the official PDF layout, with EGov Pay "
-    "using Issuing / Acquiring bank labels."
-)
+#st.caption(
+    #"This view mirrors the official PDF layout, with EGov Pay "
+    #"using Issuing / Acquiring bank labels."
+#)
