@@ -17,7 +17,7 @@ st.set_page_config(
 st.title("ACH Participants Dashboard")
 st.caption("Source: BancNet / PCHC • Data as of December 2025")
 
-DATA_DIR = Path("data")
+DATA_DIR = Path(".")
 
 # Map payment streams to PDFs
 PAYMENT_STREAMS = {
