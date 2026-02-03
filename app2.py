@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import Dict, Tuple
-import re
 
 import pandas as pd
 import streamlit as st
@@ -13,10 +12,13 @@ st.set_page_config(
     layout="wide"
 )
 
+st.title("ACH Participants Dashboard")
+st.caption("Source: BancNet / PCHC")
+
 DATA_FILE = Path("ACHdata.xlsx")
 
 # =========================
-# Load Excel (row-level)
+# Load Excel (row-level, cache-safe)
 # =========================
 @st.cache_data
 def load_participant_sheets(
@@ -32,24 +34,19 @@ def load_participant_sheets(
 
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
-        # ---- Extract robust "as of YYYY-MM-DD"
-        first_row = raw.iloc[0].dropna().astype(str).tolist()
-        joined = " ".join(first_row)
+        # Row 1: metadata
+        subtitle_parts = raw.iloc[0].dropna().astype(str).tolist()
+        subtitle = " • ".join(subtitle_parts)
 
-        subtitle = ""
-        m = re.search(
-            r"as of\s*[:\-]?\s*([0-9]{4}-[0-9]{2}-[0-9]{2})",
-            joined,
-            re.IGNORECASE
-        )
-        if m:
-            subtitle = f"as of {m.group(1)}"
-
+        # Row 2: headers
         headers = raw.iloc[1].astype(str).str.strip().tolist()
 
+        # Row 3+: data
         df = raw.iloc[2:].copy()
         df.columns = headers
         df = df.dropna(how="all")
+
+        df.columns = [c.strip() for c in df.columns]
 
         data[sheet] = (subtitle, df)
 
@@ -65,8 +62,12 @@ sheets_data = load_participant_sheets(
     DATA_FILE.stat().st_mtime
 )
 
+if not sheets_data:
+    st.error("No '*Participants' sheets found.")
+    st.stop()
+
 # =========================
-# Navigation
+# Navigation (tab replacement)
 # =========================
 sheet_names = list(sheets_data.keys())
 
@@ -80,38 +81,34 @@ active_sheet = st.radio(
 subtitle, df = sheets_data[active_sheet]
 
 # =========================
-# HEADER (Supervisor changes #4 and #5)
-# =========================
-col1, col2 = st.columns([1, 13])
-
-with col1:
-    st.image("bsp_logo.png", width=100)
-
-with col2:
-    st.markdown("## ACH Participants Dashboard")
-    if subtitle:
-        st.caption(subtitle)
-
-st.subheader(active_sheet)
-
-# =========================
-# Sidebar filters
+# Sidebar (ONLY active tab)
 # =========================
 with st.sidebar:
     st.markdown(f"### {active_sheet} Filters")
 
+    # ---- Category (participation role)
     if "Category" in df.columns:
-        cats = sorted(df["Category"].dropna().unique())
-        sel_cats = st.multiselect("Category", cats, default=cats)
+        categories = sorted(df["Category"].dropna().unique())
+        sel_categories = st.multiselect(
+            "Category",
+            categories,
+            default=categories
+        )
     else:
-        sel_cats = None
+        sel_categories = None
 
+    # ---- Institution Type
     if "Institution Type" in df.columns:
         inst_types = sorted(df["Institution Type"].dropna().unique())
-        sel_inst_types = st.multiselect("Institution Type", inst_types, default=inst_types)
+        sel_inst_types = st.multiselect(
+            "Institution Type",
+            inst_types,
+            default=inst_types
+        )
     else:
         sel_inst_types = None
 
+    # ---- Search
     search = st.text_input("Search institution")
 
 # =========================
@@ -119,120 +116,59 @@ with st.sidebar:
 # =========================
 dff = df.copy()
 
-if sel_cats is not None:
-    dff = dff[dff["Category"].isin(sel_cats)]
+if sel_categories is not None:
+    dff = dff[dff["Category"].isin(sel_categories)]
 
 if sel_inst_types is not None:
     dff = dff[dff["Institution Type"].isin(sel_inst_types)]
 
-if search:
+if search and "Institution" in dff.columns:
     dff = dff[dff["Institution"].str.contains(search, case=False, na=False)]
 
 # =========================
-# Summary table (Supervisor change #1, #2, #3)
+# KPI mapping (Institution Type–based)
 # =========================
-INST_TYPE_SHORT = {
-    "Universal and Commercial Banks (U/KBs)": "UKBs",  # renamed
-    "Thrift Banks (TBs)": "TBs",
-    "Rural Banks (RBs)": "RBs",  # will relabel display below
-    "Digital Banks": "DBs",
-    "Electronic Money Issuers (EMI) - Others": "EMI-NBFI",
+KPI_MAP = {
+    "U/KBs": "Universal and Commercial Banks (U/KBs)",
+    "TBs": "Thrift Banks (TBs)",
+    "RBs": "Rural Banks (RBs)",
+    "DBs": "Digital Banks",
+    "EMI-NBFI": "Electronic Money Issuers (EMI) - Others",
 }
 
-# Hide summary if search is active
-if not search and {"Category", "Institution Type"}.issubset(dff.columns):
+# =========================
+# Main content
+# =========================
+st.subheader(active_sheet)
+if subtitle:
+    st.caption(subtitle)
 
-    summary = (
-        dff.groupby(["Category", "Institution Type"])
-        .size()
-        .reset_index(name="Count")
-    )
+k1, k2, k3, k4, k5, k6 = st.columns(6)
 
-    pivot = summary.pivot_table(
-        index="Category",
-        columns="Institution Type",
-        values="Count",
-        aggfunc="sum",
-        fill_value=0
-    )
+k1.metric("Total", len(dff))
 
-    pivot = pivot.rename(columns=INST_TYPE_SHORT)
-    pivot = pivot[[c for c in INST_TYPE_SHORT.values() if c in pivot.columns]]
-
-    pivot["TOTAL"] = pivot.sum(axis=1)
-
-    total_row = pivot.sum(axis=0).to_frame().T
-    total_row.index = ["TOTAL"]
-    pivot = pd.concat([pivot, total_row])
-
-    pivot = pivot.replace(0, "–")
-
-    st.markdown("### Summary by Institution Type and Category")
-    st.dataframe(pivot, use_container_width=True)
-
-elif search:
-    st.info("Summary hidden while searching. Clear search to restore summary.")
+for col, (label, inst_value) in zip(
+    [k2, k3, k4, k5, k6],
+    KPI_MAP.items()
+):
+    if "Institution Type" in dff.columns:
+        col.metric(
+            label,
+            int((dff["Institution Type"] == inst_value).sum())
+        )
+    else:
+        col.metric(label, "—")
 
 st.divider()
 
-# =========================
-# PDF-style layout
-# =========================
-INST_TYPE_ORDER = list(INST_TYPE_SHORT.keys())
+st.dataframe(
+    dff.sort_values("Institution") if "Institution" in dff.columns else dff,
+    use_container_width=True,
+    hide_index=True,
+    height=520
+)
 
-if active_sheet.lower().startswith("egov"):
-    ROLE_MAP = {
-        "Issuer": "ISSUING BANKS",
-        "Acquirer": "ACQUIRING BANKS",
-    }
-else:
-    ROLE_MAP = {
-        "Sender/Receiver": "SENDER/RECEIVER",
-        "Sender Only": "SENDER ONLY",
-        "Receiver Only": "RECEIVER ONLY",
-    }
-
-for inst_type in INST_TYPE_ORDER:
-    block = dff[dff["Institution Type"] == inst_type]
-
-    if block.empty:
-        continue
-
-    # Supervisor change #3
-    display_inst_type = (
-        inst_type
-            .replace("Universal and Commercial Banks (U/KBs)", "Universal and Commercial Banks (UKBs)")
-            .replace("Rural Banks", "Rural and Cooperative Banks")
-            .replace("Digital Banks", "Digital Banks (DBs)")
-    )
-
-    st.markdown(f"## {display_inst_type}")
-
-    for role_value, role_label in ROLE_MAP.items():
-        role_block = block[block["Category"] == role_value]
-
-        if role_block.empty:
-            continue
-
-        st.markdown(f"**{role_label}**")
-
-        table = (
-            role_block[["Institution"]]
-            .sort_values("Institution")
-            .reset_index(drop=True)
-        )
-        table.index = table.index + 1
-
-        st.dataframe(
-            table,
-            use_container_width=True,
-            hide_index=False,
-            height=min(400, 35 * len(table) + 35)
-        )
-
-    st.divider()
-
-# =========================
-# Footer (Supervisor change #5)
-# =========================
-st.caption("Source: BancNet / PCHC")
+st.caption(
+    "Counts are derived from Institution Type. "
+    "Only '*Participants' worksheets are included."
+)
