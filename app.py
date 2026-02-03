@@ -18,7 +18,7 @@ st.caption("Source: BancNet / PCHC")
 DATA_FILE = Path("ACHdata.xlsx")
 
 # =========================
-# Load Excel
+# Load Excel (row-level, cache-safe)
 # =========================
 @st.cache_data
 def load_participant_sheets(
@@ -34,10 +34,14 @@ def load_participant_sheets(
 
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
+        # Row 1: metadata
         subtitle_parts = raw.iloc[0].dropna().astype(str).tolist()
         subtitle = " • ".join(subtitle_parts)
 
+        # Row 2: headers
         headers = raw.iloc[1].astype(str).str.strip().tolist()
+
+        # Row 3+: data
         df = raw.iloc[2:].copy()
         df.columns = headers
         df = df.dropna(how="all")
@@ -50,7 +54,7 @@ def load_participant_sheets(
 
 
 if not DATA_FILE.exists():
-    st.error("ACHdata.xlsx not found.")
+    st.error("ACHdata.xlsx not found in repository root.")
     st.stop()
 
 sheets_data = load_participant_sheets(
@@ -58,8 +62,12 @@ sheets_data = load_participant_sheets(
     DATA_FILE.stat().st_mtime
 )
 
+if not sheets_data:
+    st.error("No '*Participants' sheets found.")
+    st.stop()
+
 # =========================
-# Navigation
+# Navigation (tab replacement)
 # =========================
 sheet_names = list(sheets_data.keys())
 
@@ -73,20 +81,23 @@ active_sheet = st.radio(
 subtitle, df = sheets_data[active_sheet]
 
 # =========================
-# Sidebar
+# Sidebar (ONLY active tab)
 # =========================
-is_egov = active_sheet.lower().startswith("egov")
-role_label = "Issuer / Acquirer" if is_egov else "Participation Role"
-
 with st.sidebar:
     st.markdown(f"### {active_sheet} Filters")
 
+    # ---- Category (participation role)
     if "Category" in df.columns:
         categories = sorted(df["Category"].dropna().unique())
-        sel_categories = st.multiselect("Category", categories, default=categories)
+        sel_categories = st.multiselect(
+            "Category",
+            categories,
+            default=categories
+        )
     else:
         sel_categories = None
 
+    # ---- Institution Type
     if "Institution Type" in df.columns:
         inst_types = sorted(df["Institution Type"].dropna().unique())
         sel_inst_types = st.multiselect(
@@ -97,12 +108,7 @@ with st.sidebar:
     else:
         sel_inst_types = None
 
-    if "Category" in df.columns:
-        roles = sorted(df["Category"].dropna().unique())
-        sel_roles = st.multiselect(role_label, roles, default=roles)
-    else:
-        sel_roles = None
-
+    # ---- Search
     search = st.text_input("Search institution")
 
 # =========================
@@ -116,14 +122,11 @@ if sel_categories is not None:
 if sel_inst_types is not None:
     dff = dff[dff["Institution Type"].isin(sel_inst_types)]
 
-if sel_roles is not None:
-    dff = dff[dff["Category"].isin(sel_roles)]
-
-if search:
+if search and "Institution" in dff.columns:
     dff = dff[dff["Institution"].str.contains(search, case=False, na=False)]
 
 # =========================
-# KPI MAPPING (FIXED)
+# KPI mapping (Institution Type–based)
 # =========================
 KPI_MAP = {
     "U/KBs": "Universal and Commercial Banks (U/KBs)",
@@ -159,13 +162,13 @@ for col, (label, inst_value) in zip(
 st.divider()
 
 st.dataframe(
-    dff.sort_values("Institution"),
+    dff.sort_values("Institution") if "Institution" in dff.columns else dff,
     use_container_width=True,
     hide_index=True,
     height=520
 )
 
 st.caption(
-    "Counts are derived from Institution Type (row-level data). "
-    "Only '*Participants' sheets are included."
+    "Counts are derived from Institution Type. "
+    "Only '*Participants' worksheets are included."
 )
