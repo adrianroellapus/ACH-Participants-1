@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -13,26 +13,48 @@ st.set_page_config(
 )
 
 st.title("ACH Participants Dashboard")
-st.caption("Source: BancNet / PCHC • Data as of December 2025")
+st.caption("Source: BancNet / PCHC")
 
 DATA_FILE = Path("ACHdata.xlsx")
 
 # =========================
-# Load Excel (cache-safe)
+# Load Excel (row-level, cache-safe)
 # =========================
 @st.cache_data
-def load_all_sheets(xlsx_path: Path, mtime: float) -> Dict[str, pd.DataFrame]:
+def load_all_sheets(xlsx_path: Path, mtime: float) -> Dict[str, Tuple[str, pd.DataFrame]]:
+    """
+    Returns:
+      {
+        sheet_name: (subtitle_text, dataframe)
+      }
+    """
     xls = pd.ExcelFile(xlsx_path, engine="openpyxl")
     data = {}
 
     for sheet in xls.sheet_names:
-        df = pd.read_excel(xls, sheet_name=sheet)
+        # Read entire sheet first
+        raw = pd.read_excel(
+            xlsx_path,
+            sheet_name=sheet,
+            header=None
+        )
 
-        # Basic cleanup
-        df = df.dropna(how="all").dropna(axis=1, how="all")
+        # --- Row 1: metadata (title / as-of date)
+        subtitle_parts = raw.iloc[0].dropna().astype(str).tolist()
+        subtitle = " • ".join(subtitle_parts)
+
+        # --- Row 2: column headers
+        headers = raw.iloc[1].astype(str).str.strip().tolist()
+
+        # --- Row 3 onwards: data
+        df = raw.iloc[2:].copy()
+        df.columns = headers
+        df = df.dropna(how="all")
+
+        # Strip column names defensively
         df.columns = [c.strip() for c in df.columns]
 
-        data[sheet] = df
+        data[sheet] = (subtitle, df)
 
     return data
 
@@ -55,21 +77,23 @@ tabs = st.tabs(tab_names)
 
 for tab, sheet_name in zip(tabs, tab_names):
     with tab:
-        df = sheets_data[sheet_name].copy()
+        subtitle, df = sheets_data[sheet_name]
 
         st.subheader(f"{sheet_name} ACH Participants")
+        if subtitle:
+            st.caption(subtitle)
 
         if df.empty:
-            st.warning("No data found in this sheet.")
+            st.warning("No row-level data found in this sheet.")
             continue
 
         # =========================
-        # Determine role labels
+        # EGov Pay role handling
         # =========================
-        is_egov = sheet_name.strip().lower() == "egov pay"
+        is_egov = sheet_name.strip().lower().startswith("egov")
 
-        role_label = "Role"
-        role_display_name = "Issuer / Acquirer" if is_egov else "Participation Role"
+        role_col = "Role"
+        role_label = "Issuer / Acquirer" if is_egov else "Participation Role"
 
         # =========================
         # Filters (ONLY for active tab)
@@ -89,11 +113,11 @@ for tab, sheet_name in zip(tabs, tab_names):
             else:
                 sel_cats = None
 
-            # Role filter (Sender/Receiver OR Issuer/Acquirer)
-            if role_label in df.columns:
-                roles = sorted(df[role_label].dropna().unique().tolist())
+            # Role filter
+            if role_col in df.columns:
+                roles = sorted(df[role_col].dropna().unique().tolist())
                 sel_roles = st.multiselect(
-                    role_display_name,
+                    role_label,
                     options=roles,
                     default=roles,
                     key=f"{sheet_name}_role"
@@ -116,7 +140,7 @@ for tab, sheet_name in zip(tabs, tab_names):
             dff = dff[dff["Category"].isin(sel_cats)]
 
         if sel_roles is not None:
-            dff = dff[dff[role_label].isin(sel_roles)]
+            dff = dff[dff[role_col].isin(sel_roles)]
 
         if search and "Institution" in dff.columns:
             dff = dff[dff["Institution"].str.contains(search, case=False, na=False)]
@@ -150,6 +174,6 @@ for tab, sheet_name in zip(tabs, tab_names):
         )
 
         st.caption(
-            "Data loaded directly from ACHdata.xlsx. "
-            "Each tab corresponds to a worksheet."
+            "Row-level data loaded from ACHdata.xlsx. "
+            "Totals are computed dynamically by the dashboard."
         )
