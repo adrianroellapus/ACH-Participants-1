@@ -8,17 +8,17 @@ import streamlit as st
 # App config
 # =========================
 st.set_page_config(
-    page_title="ACH Participants Dashboard",
+    page_title="ACH Participants Dashboard (PDF Style)",
     layout="wide"
 )
 
 st.title("ACH Participants Dashboard")
-st.caption("Source: BancNet / PCHC")
+st.caption("PDF-style view • Source: BancNet / PCHC")
 
 DATA_FILE = Path("ACHdata.xlsx")
 
 # =========================
-# Load Excel (row-level, cache-safe)
+# Load Excel (row-level)
 # =========================
 @st.cache_data
 def load_participant_sheets(
@@ -34,18 +34,13 @@ def load_participant_sheets(
 
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
-        # Row 1: metadata
         subtitle_parts = raw.iloc[0].dropna().astype(str).tolist()
         subtitle = " • ".join(subtitle_parts)
 
-        # Row 2: headers
         headers = raw.iloc[1].astype(str).str.strip().tolist()
-
-        # Row 3+: data
         df = raw.iloc[2:].copy()
         df.columns = headers
         df = df.dropna(how="all")
-
         df.columns = [c.strip() for c in df.columns]
 
         data[sheet] = (subtitle, df)
@@ -54,7 +49,7 @@ def load_participant_sheets(
 
 
 if not DATA_FILE.exists():
-    st.error("ACHdata.xlsx not found in repository root.")
+    st.error("ACHdata.xlsx not found.")
     st.stop()
 
 sheets_data = load_participant_sheets(
@@ -67,7 +62,7 @@ if not sheets_data:
     st.stop()
 
 # =========================
-# Navigation (tab replacement)
+# Navigation
 # =========================
 sheet_names = list(sheets_data.keys())
 
@@ -81,12 +76,11 @@ active_sheet = st.radio(
 subtitle, df = sheets_data[active_sheet]
 
 # =========================
-# Sidebar (ONLY active tab)
+# Sidebar filters (simple)
 # =========================
 with st.sidebar:
     st.markdown(f"### {active_sheet} Filters")
 
-    # ---- Category (participation role)
     if "Category" in df.columns:
         categories = sorted(df["Category"].dropna().unique())
         sel_categories = st.multiselect(
@@ -97,18 +91,6 @@ with st.sidebar:
     else:
         sel_categories = None
 
-    # ---- Institution Type
-    if "Institution Type" in df.columns:
-        inst_types = sorted(df["Institution Type"].dropna().unique())
-        sel_inst_types = st.multiselect(
-            "Institution Type",
-            inst_types,
-            default=inst_types
-        )
-    else:
-        sel_inst_types = None
-
-    # ---- Search
     search = st.text_input("Search institution")
 
 # =========================
@@ -119,56 +101,66 @@ dff = df.copy()
 if sel_categories is not None:
     dff = dff[dff["Category"].isin(sel_categories)]
 
-if sel_inst_types is not None:
-    dff = dff[dff["Institution Type"].isin(sel_inst_types)]
-
-if search and "Institution" in dff.columns:
+if search:
     dff = dff[dff["Institution"].str.contains(search, case=False, na=False)]
 
 # =========================
-# KPI mapping (Institution Type–based)
-# =========================
-KPI_MAP = {
-    "U/KBs": "Universal and Commercial Banks (U/KBs)",
-    "TBs": "Thrift Banks (TBs)",
-    "RBs": "Rural Banks (RBs)",
-    "DBs": "Digital Banks",
-    "EMI-NBFI": "Electronic Money Issuers (EMI) - Others",
-}
-
-# =========================
-# Main content
+# Main header
 # =========================
 st.subheader(active_sheet)
 if subtitle:
     st.caption(subtitle)
 
-k1, k2, k3, k4, k5, k6 = st.columns(6)
+# =========================
+# PDF-style grouped layout
+# =========================
+INST_TYPE_ORDER = [
+    "Universal and Commercial Banks (U/KBs)",
+    "Thrift Banks (TBs)",
+    "Rural Banks (RBs)",
+    "Digital Banks",
+    "Electronic Money Issuers (EMI) - Others",
+]
 
-k1.metric("Total", len(dff))
+ROLE_ORDER = [
+    "Sender/Receiver",
+    "Sender Only",
+    "Receiver Only",
+]
 
-for col, (label, inst_value) in zip(
-    [k2, k3, k4, k5, k6],
-    KPI_MAP.items()
-):
-    if "Institution Type" in dff.columns:
-        col.metric(
-            label,
-            int((dff["Institution Type"] == inst_value).sum())
+for inst_type in INST_TYPE_ORDER:
+    block = dff[dff["Institution Type"] == inst_type]
+
+    if block.empty:
+        continue
+
+    st.markdown(f"## {inst_type}")
+
+    for role in ROLE_ORDER:
+        role_block = block[block["Category"] == role]
+
+        if role_block.empty:
+            continue
+
+        st.markdown(f"**{role.upper()}**")
+
+        table = (
+            role_block[["Institution"]]
+            .sort_values("Institution")
+            .reset_index(drop=True)
         )
-    else:
-        col.metric(label, "—")
+        table.index = table.index + 1  # numbering starts at 1
 
-st.divider()
+        st.dataframe(
+            table,
+            use_container_width=True,
+            hide_index=False,
+            height=min(400, 35 * len(table) + 35)
+        )
 
-st.dataframe(
-    dff.sort_values("Institution") if "Institution" in dff.columns else dff,
-    use_container_width=True,
-    hide_index=True,
-    height=520
-)
+    st.divider()
 
 st.caption(
-    "Counts are derived from Institution Type. "
-    "Only '*Participants' worksheets are included."
+    "This view mirrors the official PDF layout: "
+    "grouped by Institution Type and Participation Role."
 )
