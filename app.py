@@ -200,7 +200,7 @@ st.dataframe(
     height=520
 )
 
-st.caption(
-    "Summary and details are derived from row-level data in ACHdata.xlsx. "
-    "Only worksheets ending with '*Participants' are included."
-)
+#st.caption(
+    #"Summary and details are derived from row-level data in ACHdata.xlsx. "
+    #"Only worksheets ending with '*Participants' are included."
+#)
