@@ -34,10 +34,14 @@ def load_participant_sheets(
 
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
+        # Row 1: metadata
         subtitle_parts = raw.iloc[0].dropna().astype(str).tolist()
         subtitle = " • ".join(subtitle_parts)
 
+        # Row 2: headers
         headers = raw.iloc[1].astype(str).str.strip().tolist()
+
+        # Row 3+: data
         df = raw.iloc[2:].copy()
         df.columns = headers
         df = df.dropna(how="all")
@@ -63,7 +67,7 @@ if not sheets_data:
     st.stop()
 
 # =========================
-# Navigation (TAB REPLACEMENT)
+# Navigation (tab replacement)
 # =========================
 sheet_names = list(sheets_data.keys())
 
@@ -77,7 +81,7 @@ active_sheet = st.radio(
 subtitle, df = sheets_data[active_sheet]
 
 # =========================
-# Sidebar (ONLY active tab)
+# Sidebar (ONLY active sheet)
 # =========================
 is_egov = active_sheet.lower().startswith("egov")
 role_label = "Issuer / Acquirer" if is_egov else "Participation Role"
@@ -85,16 +89,29 @@ role_label = "Issuer / Acquirer" if is_egov else "Participation Role"
 with st.sidebar:
     st.markdown(f"### {active_sheet} Filters")
 
+    # ---- Category filter (U/KBs, TBs, etc.)
     if "Category" in df.columns:
-        cats = sorted(df["Category"].dropna().unique())
-        sel_cats = st.multiselect(
-            "Institution Type",
-            cats,
-            default=cats
+        categories = sorted(df["Category"].dropna().unique())
+        sel_categories = st.multiselect(
+            "Category",
+            categories,
+            default=categories
         )
     else:
-        sel_cats = None
+        sel_categories = None
 
+    # ---- Institution Type filter (descriptive)
+    if "Institution Type" in df.columns:
+        inst_types = sorted(df["Institution Type"].dropna().unique())
+        sel_inst_types = st.multiselect(
+            "Institution Type",
+            inst_types,
+            default=inst_types
+        )
+    else:
+        sel_inst_types = None
+
+    # ---- Role filter
     if "Role" in df.columns:
         roles = sorted(df["Role"].dropna().unique())
         sel_roles = st.multiselect(
@@ -105,6 +122,7 @@ with st.sidebar:
     else:
         sel_roles = None
 
+    # ---- Search
     search = st.text_input("Search institution")
 
 # =========================
@@ -112,8 +130,11 @@ with st.sidebar:
 # =========================
 dff = df.copy()
 
-if sel_cats is not None:
-    dff = dff[dff["Category"].isin(sel_cats)]
+if sel_categories is not None:
+    dff = dff[dff["Category"].isin(sel_categories)]
+
+if sel_inst_types is not None:
+    dff = dff[dff["Institution Type"].isin(sel_inst_types)]
 
 if sel_roles is not None:
     dff = dff[dff["Role"].isin(sel_roles)]
@@ -151,5 +172,5 @@ st.dataframe(
 
 st.caption(
     "Row-level data loaded from ACHdata.xlsx. "
-    "Only '*Participants' sheets are included."
+    "Only '*Participants' worksheets are included."
 )
