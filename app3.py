@@ -14,6 +14,30 @@ st.set_page_config(
     layout="wide"
 )
 
+# =========================
+# Stronger table borders (light + dark mode)
+# =========================
+st.markdown("""
+<style>
+
+/* Make dataframe borders clearly visible */
+[data-testid="stDataFrame"] table {
+    border-collapse: collapse !important;
+}
+
+[data-testid="stDataFrame"] th,
+[data-testid="stDataFrame"] td {
+    border: 1px solid rgba(128,128,128,0.6) !important;
+}
+
+/* Slightly stronger header border */
+[data-testid="stDataFrame"] thead th {
+    border-bottom: 2px solid rgba(128,128,128,0.9) !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
 DATA_FILE = Path("ACHdata.xlsx")
 
 # =========================
@@ -33,7 +57,7 @@ def load_participant_sheets(
 
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
-        # Extract robust "as of YYYY-MM-DD"
+        # Extract "as of YYYY-MM-DD"
         first_row = raw.iloc[0].dropna().astype(str).tolist()
         joined = " ".join(first_row)
 
@@ -83,8 +107,7 @@ subtitle, df = sheets_data[active_sheet]
 # =========================
 # PASSWORD FOR QR Ph P2M TAB ONLY
 # =========================
-
-APP_PASSWORD = os.getenv("APP_PASSWORD", "Adrian4Gov")
+APP_PASSWORD = os.getenv("APP_PASSWORD", "PPDD")
 
 if active_sheet == "QR Ph P2M Participants":
 
