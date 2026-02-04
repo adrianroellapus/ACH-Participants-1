@@ -50,7 +50,6 @@ def load_participant_sheets(xlsx_path: Path, mtime: float) -> Dict[str, Tuple[st
 
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
-        # Extract "as of YYYY-MM-DD"
         first_row = raw.iloc[0].dropna().astype(str).tolist()
         joined = " ".join(first_row)
 
@@ -173,7 +172,7 @@ if search:
     dff = dff[dff["Institution"].str.contains(search, case=False, na=False)]
 
 # =========================
-# Summary table
+# Institution Type Short Names
 # =========================
 INST_TYPE_SHORT = {
     "Universal and Commercial Banks (U/KBs)": "UKBs",
@@ -183,7 +182,77 @@ INST_TYPE_SHORT = {
     "Electronic Money Issuers (EMI) - Others": "EMI-NBFI",
 }
 
-if not search and {"Category", "Institution Type"}.issubset(dff.columns):
+# =========================
+# SUMMARY SECTION
+# =========================
+
+if active_sheet == "Bills Pay Participants (Full)" and not search:
+
+    required_cols = {
+        "Institution Type",
+        "QR Sender",
+        "QR Receiver",
+        "Non-QR Sender",
+        "Non-QR Receiver"
+    }
+
+    if required_cols.issubset(dff.columns):
+
+        def categorize(row):
+            qr_s = bool(row["QR Sender"])
+            qr_r = bool(row["QR Receiver"])
+            nqr_s = bool(row["Non-QR Sender"])
+            nqr_r = bool(row["Non-QR Receiver"])
+
+            if qr_s and qr_r:
+                return "QR Sender/Receiver"
+            if qr_s and not qr_r:
+                return "QR Sender Only"
+            if not qr_s and qr_r:
+                return "QR Receiver Only"
+            if nqr_s and nqr_r:
+                return "Non-QR Sender/Receiver"
+            if nqr_s and not nqr_r:
+                return "Non-QR Sender Only"
+            if not nqr_s and nqr_r:
+                return "Non-QR Receiver Only"
+            return None
+
+        temp = dff.copy()
+        temp["QR Category"] = temp.apply(categorize, axis=1)
+        temp = temp.dropna(subset=["QR Category"])
+
+        summary = (
+            temp.groupby(["QR Category", "Institution Type"])
+            .size()
+            .reset_index(name="Count")
+        )
+
+        pivot = summary.pivot_table(
+            index="QR Category",
+            columns="Institution Type",
+            values="Count",
+            aggfunc="sum",
+            fill_value=0
+        )
+
+        pivot = pivot.rename(columns=INST_TYPE_SHORT)
+        pivot = pivot[[c for c in INST_TYPE_SHORT.values() if c in pivot.columns]]
+
+        pivot["TOTAL"] = pivot.sum(axis=1)
+
+        total_row = pivot.sum(axis=0).to_frame().T
+        total_row.index = ["TOTAL"]
+        pivot = pd.concat([pivot, total_row])
+
+        pivot = pivot.replace(0, "–")
+
+        st.markdown("### Summary by Institution Type and QR Category")
+        st.dataframe(pivot, use_container_width=True)
+
+    st.divider()
+
+elif not search and {"Category", "Institution Type"}.issubset(dff.columns):
 
     summary = (
         dff.groupby(["Category", "Institution Type"])
@@ -213,14 +282,15 @@ if not search and {"Category", "Institution Type"}.issubset(dff.columns):
     st.markdown("### Summary by Institution Type and Category")
     st.dataframe(pivot, use_container_width=True)
 
+    st.divider()
+
 elif search:
     st.info("Summary hidden while searching. Clear search to restore summary.")
 
-st.divider()
+# =========================
+# PDF-STYLE TABLES
+# =========================
 
-# =========================
-# PDF-style layout
-# =========================
 INST_TYPE_ORDER = list(INST_TYPE_SHORT.keys())
 
 if active_sheet.lower().startswith("egov"):
@@ -235,7 +305,6 @@ else:
         "Receiver Only": "RECEIVER ONLY",
     }
 
-# Add QR legend only for Bills Pay Participants
 if active_sheet == "Bills Pay Participants":
     st.markdown("🟢 = QR Enabled")
     st.markdown("")
@@ -256,6 +325,44 @@ for inst_type in INST_TYPE_ORDER:
 
     st.markdown(f"## {display_inst_type}")
 
+    # =======================
+    # SPECIAL TABLE FOR FULL TAB
+    # =======================
+    if active_sheet == "Bills Pay Participants (Full)":
+
+        table = (
+            block[[
+                "Institution",
+                "QR Sender",
+                "QR Receiver",
+                "Non-QR Sender",
+                "Non-QR Receiver"
+            ]]
+            .sort_values("Institution")
+            .reset_index(drop=True)
+        )
+
+        def bool_to_icon(x):
+            return "✅" if bool(x) else "❌"
+
+        for col in ["QR Sender", "QR Receiver", "Non-QR Sender", "Non-QR Receiver"]:
+            table[col] = table[col].apply(bool_to_icon)
+
+        table.index = table.index + 1
+
+        st.dataframe(
+            table,
+            use_container_width=True,
+            hide_index=False,
+            height=min(600, 35 * len(table) + 35)
+        )
+
+        st.divider()
+        continue
+
+    # =======================
+    # NORMAL TABS
+    # =======================
     for role_value, role_label in ROLE_MAP.items():
 
         role_block = block[block["Category"] == role_value]
@@ -265,7 +372,6 @@ for inst_type in INST_TYPE_ORDER:
 
         st.markdown(f"**{role_label}**")
 
-        # QR logic ONLY for Bills Pay Participants
         if active_sheet == "Bills Pay Participants" and "QR Enabled" in role_block.columns:
 
             table = (
@@ -278,7 +384,6 @@ for inst_type in INST_TYPE_ORDER:
                 lambda x: "🟢" if str(x).strip().lower() == "true" else ""
             )
 
-            table = table[["Institution", "QR Enabled"]]
             table.index = table.index + 1
 
         else:
