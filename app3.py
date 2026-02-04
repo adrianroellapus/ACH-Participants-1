@@ -274,11 +274,11 @@ for inst_type in INST_TYPE_ORDER:
                 .reset_index(drop=True)
             )
 
-            table["QR"] = table["QR Enabled"].apply(
+            table["QR Enabled"] = table["QR Enabled"].apply(
                 lambda x: "🟢" if str(x).strip().lower() == "true" else ""
             )
 
-            table = table[["Institution", "QR"]]
+            table = table[["Institution", "QR Enabled"]]
             table.index = table.index + 1
 
         else:
