@@ -52,8 +52,9 @@ def load_participant_sheets(
     data = {}
 
     for sheet in xls.sheet_names:
-        if not sheet.strip().endswith("Participants"):
+        if "Participants" not in sheet:
             continue
+
 
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
