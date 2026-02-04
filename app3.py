@@ -109,7 +109,7 @@ subtitle, df = sheets_data[active_sheet]
 # =========================
 APP_PASSWORD = os.getenv("APP_PASSWORD", "PPDD")
 
-if active_sheet == "QR Ph P2M Participants":
+if active_sheet == "Bills Pay Participants (Full)":
 
     if "qr_authenticated" not in st.session_state:
         st.session_state.qr_authenticated = False
