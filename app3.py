@@ -38,10 +38,7 @@ DATA_FILE = Path("ACHdata.xlsx")
 # Load Excel
 # =========================
 @st.cache_data
-def load_participant_sheets(
-    xlsx_path: Path,
-    mtime: float
-) -> Dict[str, Tuple[str, pd.DataFrame]]:
+def load_participant_sheets(xlsx_path: Path, mtime: float) -> Dict[str, Tuple[str, pd.DataFrame]]:
 
     xls = pd.ExcelFile(xlsx_path, engine="openpyxl")
     data = {}
@@ -222,30 +219,6 @@ elif search:
 st.divider()
 
 # =========================
-# Helper for QR rendering
-# =========================
-def render_institution_list(role_block, show_qr=False):
-
-    html = ""
-    sorted_block = role_block.sort_values("Institution").reset_index(drop=True)
-
-    for i, row in sorted_block.iterrows():
-        name = row["Institution"]
-        qr_icon = ""
-
-        if show_qr and "QR Enabled" in sorted_block.columns:
-            if str(row["QR Enabled"]).strip().lower() == "true":
-                qr_icon = (
-                    '<img src="qrph.png" '
-                    'style="height:18px; margin-left:8px; vertical-align:middle;">'
-                )
-
-        html += f"<div>{i+1}. {name}{qr_icon}</div>"
-
-    return html
-
-
-# =========================
 # PDF-style layout
 # =========================
 INST_TYPE_ORDER = list(INST_TYPE_SHORT.keys())
@@ -261,6 +234,11 @@ else:
         "Sender Only": "SENDER ONLY",
         "Receiver Only": "RECEIVER ONLY",
     }
+
+# Add QR legend only for Bills Pay Participants
+if active_sheet == "Bills Pay Participants":
+    st.markdown("🟢 = QR Enabled")
+    st.markdown("")
 
 for inst_type in INST_TYPE_ORDER:
 
@@ -289,8 +267,20 @@ for inst_type in INST_TYPE_ORDER:
 
         # QR logic ONLY for Bills Pay Participants
         if active_sheet == "Bills Pay Participants" and "QR Enabled" in role_block.columns:
-            html_block = render_institution_list(role_block, show_qr=True)
-            st.markdown(html_block, unsafe_allow_html=True)
+
+            table = (
+                role_block[["Institution", "QR Enabled"]]
+                .sort_values("Institution")
+                .reset_index(drop=True)
+            )
+
+            table["QR"] = table["QR Enabled"].apply(
+                lambda x: "🟢" if str(x).strip().lower() == "true" else ""
+            )
+
+            table = table[["Institution", "QR"]]
+            table.index = table.index + 1
+
         else:
             table = (
                 role_block[["Institution"]]
@@ -299,12 +289,12 @@ for inst_type in INST_TYPE_ORDER:
             )
             table.index = table.index + 1
 
-            st.dataframe(
-                table,
-                use_container_width=True,
-                hide_index=False,
-                height=min(400, 35 * len(table) + 35)
-            )
+        st.dataframe(
+            table,
+            use_container_width=True,
+            hide_index=False,
+            height=min(400, 35 * len(table) + 35)
+        )
 
     st.divider()
 
