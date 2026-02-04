@@ -172,7 +172,7 @@ if search:
     dff = dff[dff["Institution"].str.contains(search, case=False, na=False)]
 
 # =========================
-# Institution Type Short Names
+# Institution Type Mapping
 # =========================
 INST_TYPE_SHORT = {
     "Universal and Commercial Banks (U/KBs)": "UKBs",
@@ -183,9 +183,8 @@ INST_TYPE_SHORT = {
 }
 
 # =========================
-# SUMMARY SECTION
+# SUMMARY — FULL TAB FIXED
 # =========================
-
 if active_sheet == "Bills Pay Participants (Full)" and not search:
 
     required_cols = {
@@ -198,11 +197,17 @@ if active_sheet == "Bills Pay Participants (Full)" and not search:
 
     if required_cols.issubset(dff.columns):
 
-        def categorize(row):
-            qr_s = bool(row["QR Sender"])
-            qr_r = bool(row["QR Receiver"])
-            nqr_s = bool(row["Non-QR Sender"])
-            nqr_r = bool(row["Non-QR Receiver"])
+        temp = dff.copy()
+
+        # Normalize to boolean properly
+        for col in ["QR Sender", "QR Receiver", "Non-QR Sender", "Non-QR Receiver"]:
+            temp[col] = temp[col].astype(str).str.upper().eq("TRUE")
+
+        def determine_category(row):
+            qr_s = row["QR Sender"]
+            qr_r = row["QR Receiver"]
+            nqr_s = row["Non-QR Sender"]
+            nqr_r = row["Non-QR Receiver"]
 
             if qr_s and qr_r:
                 return "QR Sender/Receiver"
@@ -218,8 +223,7 @@ if active_sheet == "Bills Pay Participants (Full)" and not search:
                 return "Non-QR Receiver Only"
             return None
 
-        temp = dff.copy()
-        temp["QR Category"] = temp.apply(categorize, axis=1)
+        temp["QR Category"] = temp.apply(determine_category, axis=1)
         temp = temp.dropna(subset=["QR Category"])
 
         summary = (
@@ -250,7 +254,7 @@ if active_sheet == "Bills Pay Participants (Full)" and not search:
         st.markdown("### Summary by Institution Type and QR Category")
         st.dataframe(pivot, use_container_width=True)
 
-    st.divider()
+        st.divider()
 
 elif not search and {"Category", "Institution Type"}.issubset(dff.columns):
 
@@ -288,47 +292,18 @@ elif search:
     st.info("Summary hidden while searching. Clear search to restore summary.")
 
 # =========================
-# PDF-STYLE TABLES
+# FULL TAB TABLE (5 columns)
 # =========================
+if active_sheet == "Bills Pay Participants (Full)":
 
-INST_TYPE_ORDER = list(INST_TYPE_SHORT.keys())
+    for inst_type in INST_TYPE_SHORT.keys():
 
-if active_sheet.lower().startswith("egov"):
-    ROLE_MAP = {
-        "Issuer": "ISSUING BANKS",
-        "Acquirer": "ACQUIRING BANKS",
-    }
-else:
-    ROLE_MAP = {
-        "Sender/Receiver": "SENDER/RECEIVER",
-        "Sender Only": "SENDER ONLY",
-        "Receiver Only": "RECEIVER ONLY",
-    }
+        block = dff[dff["Institution Type"] == inst_type]
 
-if active_sheet == "Bills Pay Participants":
-    st.markdown("🟢 = QR Enabled")
-    st.markdown("")
+        if block.empty:
+            continue
 
-for inst_type in INST_TYPE_ORDER:
-
-    block = dff[dff["Institution Type"] == inst_type]
-
-    if block.empty:
-        continue
-
-    display_inst_type = (
-        inst_type
-        .replace("Universal and Commercial Banks (U/KBs)", "Universal and Commercial Banks (UKBs)")
-        .replace("Rural Banks", "Rural and Cooperative Banks")
-        .replace("Digital Banks", "Digital Banks (DBs)")
-    )
-
-    st.markdown(f"## {display_inst_type}")
-
-    # =======================
-    # SPECIAL TABLE FOR FULL TAB
-    # =======================
-    if active_sheet == "Bills Pay Participants (Full)":
+        st.markdown(f"## {inst_type.replace('(U/KBs)', '(UKBs)')}")
 
         table = (
             block[[
@@ -342,11 +317,10 @@ for inst_type in INST_TYPE_ORDER:
             .reset_index(drop=True)
         )
 
-        def bool_to_icon(x):
-            return "✅" if bool(x) else "❌"
-
         for col in ["QR Sender", "QR Receiver", "Non-QR Sender", "Non-QR Receiver"]:
-            table[col] = table[col].apply(bool_to_icon)
+            table[col] = table[col].astype(str).str.upper().map(
+                {"TRUE": "✅", "FALSE": "❌"}
+            )
 
         table.index = table.index + 1
 
@@ -358,50 +332,6 @@ for inst_type in INST_TYPE_ORDER:
         )
 
         st.divider()
-        continue
-
-    # =======================
-    # NORMAL TABS
-    # =======================
-    for role_value, role_label in ROLE_MAP.items():
-
-        role_block = block[block["Category"] == role_value]
-
-        if role_block.empty:
-            continue
-
-        st.markdown(f"**{role_label}**")
-
-        if active_sheet == "Bills Pay Participants" and "QR Enabled" in role_block.columns:
-
-            table = (
-                role_block[["Institution", "QR Enabled"]]
-                .sort_values("Institution")
-                .reset_index(drop=True)
-            )
-
-            table["QR Enabled"] = table["QR Enabled"].apply(
-                lambda x: "🟢" if str(x).strip().lower() == "true" else ""
-            )
-
-            table.index = table.index + 1
-
-        else:
-            table = (
-                role_block[["Institution"]]
-                .sort_values("Institution")
-                .reset_index(drop=True)
-            )
-            table.index = table.index + 1
-
-        st.dataframe(
-            table,
-            use_container_width=True,
-            hide_index=False,
-            height=min(400, 35 * len(table) + 35)
-        )
-
-    st.divider()
 
 # =========================
 # Footer
