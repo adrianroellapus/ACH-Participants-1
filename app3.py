@@ -108,7 +108,7 @@ subtitle, df = sheets_data[active_sheet]
 # =========================
 # PASSWORD FOR QR Ph P2M TAB ONLY
 # =========================
-APP_PASSWORD = os.getenv("APP_PASSWORD", "PPDD")
+APP_PASSWORD = os.getenv("APP_PASSWORD", "GovAdrian")
 
 if active_sheet == "Bills Pay Participants (Full)":
 
@@ -119,7 +119,7 @@ if active_sheet == "Bills Pay Participants (Full)":
         st.warning("🔐 This tab is password protected")
 
         password = st.text_input(
-            "Enter password to access QR Ph P2M",
+            "Enter password to access Bills Pay Participants (Full)",
             type="password"
         )
 
