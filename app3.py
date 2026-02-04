@@ -7,31 +7,6 @@ import pandas as pd
 import streamlit as st
 
 # =========================
-# PASSWORD PROTECTION
-# =========================
-
-# Set your password here OR use environment variable
-APP_PASSWORD = os.getenv("APP_PASSWORD", "PPDD")
-
-def check_password():
-    if "authenticated" not in st.session_state:
-        st.session_state.authenticated = False
-
-    if not st.session_state.authenticated:
-        st.title("🔐 ACH Dashboard Login")
-        password = st.text_input("Enter password", type="password")
-
-        if password == APP_PASSWORD:
-            st.session_state.authenticated = True
-            st.rerun()
-        elif password:
-            st.error("Incorrect password")
-
-        st.stop()
-
-check_password()
-
-# =========================
 # App config
 # =========================
 st.set_page_config(
@@ -58,7 +33,7 @@ def load_participant_sheets(
 
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
-        # ---- Extract robust "as of YYYY-MM-DD"
+        # Extract robust "as of YYYY-MM-DD"
         first_row = raw.iloc[0].dropna().astype(str).tolist()
         joined = " ".join(first_row)
 
@@ -104,6 +79,33 @@ active_sheet = st.radio(
 )
 
 subtitle, df = sheets_data[active_sheet]
+
+# =========================
+# PASSWORD FOR QR Ph P2M TAB ONLY
+# =========================
+
+APP_PASSWORD = os.getenv("APP_PASSWORD", "PPDD")
+
+if active_sheet == "QR Ph P2M Participants":
+
+    if "qr_authenticated" not in st.session_state:
+        st.session_state.qr_authenticated = False
+
+    if not st.session_state.qr_authenticated:
+        st.warning("🔐 This tab is password protected")
+
+        password = st.text_input(
+            "Enter password to access QR Ph P2M",
+            type="password"
+        )
+
+        if password == APP_PASSWORD:
+            st.session_state.qr_authenticated = True
+            st.rerun()
+        elif password:
+            st.error("Incorrect password")
+
+        st.stop()
 
 # =========================
 # HEADER
