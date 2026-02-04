@@ -195,18 +195,12 @@ if active_sheet == "Bills Pay Participants (Full)":
             df_bool[col] = df_bool[col].astype(str).str.upper() == "TRUE"
 
     categories = {
-        "QR Sender/Receiver":
-            df_bool["QR Sender"] & df_bool["QR Receiver"],
-        "QR Sender Only":
-            df_bool["QR Sender"] & ~df_bool["QR Receiver"],
-        "QR Receiver Only":
-            ~df_bool["QR Sender"] & df_bool["QR Receiver"],
-        "Non-QR Sender/Receiver":
-            df_bool["Non-QR Sender"] & df_bool["Non-QR Receiver"],
-        "Non-QR Sender Only":
-            df_bool["Non-QR Sender"] & ~df_bool["Non-QR Receiver"],
-        "Non-QR Receiver Only":
-            ~df_bool["Non-QR Sender"] & df_bool["Non-QR Receiver"],
+        "QR Sender/Receiver": df_bool["QR Sender"] & df_bool["QR Receiver"],
+        "QR Sender Only": df_bool["QR Sender"] & ~df_bool["QR Receiver"],
+        "QR Receiver Only": ~df_bool["QR Sender"] & df_bool["QR Receiver"],
+        "Non-QR Sender/Receiver": df_bool["Non-QR Sender"] & df_bool["Non-QR Receiver"],
+        "Non-QR Sender Only": df_bool["Non-QR Sender"] & ~df_bool["Non-QR Receiver"],
+        "Non-QR Receiver Only": ~df_bool["Non-QR Sender"] & df_bool["Non-QR Receiver"],
     }
 
     summary_rows = []
@@ -223,67 +217,171 @@ if active_sheet == "Bills Pay Participants (Full)":
     summary_df = pd.concat(summary_rows, axis=1).T.fillna(0)
 
     summary_df = summary_df.rename(columns=INST_TYPE_SHORT)
-
-    # 🔥 FORCE INTEGER (fix decimal issue)
     summary_df = summary_df.astype(int)
 
     summary_df["TOTAL"] = summary_df.sum(axis=1)
 
     total_row = summary_df.sum(axis=0)
     total_row.name = "TOTAL"
-
     summary_df = pd.concat([summary_df, total_row.to_frame().T])
 
     summary_df = summary_df.replace(0, "–")
 
     st.markdown("### Summary by Institution Type and QR Category")
     st.dataframe(summary_df, use_container_width=True)
-
     st.divider()
 
 # ==============================================================
 # ===================== NORMAL TAB SUMMARY =====================
 # ==============================================================
-elif active_sheet != "Bills Pay Participants (Full)" and not search:
+elif not search and {"Category", "Institution Type"}.issubset(dff.columns):
 
-    if {"Category", "Institution Type"}.issubset(dff.columns):
+    summary = (
+        dff.groupby(["Category", "Institution Type"])
+        .size()
+        .reset_index(name="Count")
+    )
 
-        summary = (
-            dff.groupby(["Category", "Institution Type"])
-            .size()
-            .reset_index(name="Count")
-        )
+    pivot = summary.pivot_table(
+        index="Category",
+        columns="Institution Type",
+        values="Count",
+        aggfunc="sum",
+        fill_value=0
+    )
 
-        pivot = summary.pivot_table(
-            index="Category",
-            columns="Institution Type",
-            values="Count",
-            aggfunc="sum",
-            fill_value=0
-        )
+    pivot = pivot.rename(columns=INST_TYPE_SHORT)
+    pivot = pivot.astype(int)
 
-        pivot = pivot.rename(columns=INST_TYPE_SHORT)
-        pivot = pivot.astype(int)
+    pivot["TOTAL"] = pivot.sum(axis=1)
 
-        pivot["TOTAL"] = pivot.sum(axis=1)
+    total_row = pivot.sum(axis=0)
+    total_row.name = "TOTAL"
+    pivot = pd.concat([pivot, total_row.to_frame().T])
 
-        total_row = pivot.sum(axis=0)
-        total_row.name = "TOTAL"
-        pivot = pd.concat([pivot, total_row.to_frame().T])
+    pivot = pivot.replace(0, "–")
 
-        pivot = pivot.replace(0, "–")
-
-        st.markdown("### Summary by Institution Type and Category")
-        st.dataframe(pivot, use_container_width=True)
-
-        st.divider()
+    st.markdown("### Summary by Institution Type and Category")
+    st.dataframe(pivot, use_container_width=True)
+    st.divider()
 
 elif search:
     st.info("Summary hidden while searching. Clear search to restore summary.")
 
 # ==============================================================
-# ===================== REST OF YOUR TABLE CODE =================
+# ===================== DETAILED TABLES ========================
 # ==============================================================
-# (unchanged from your working version)
 
-# KEEP YOUR EXISTING TABLE RENDERING CODE BELOW THIS POINT
+INST_TYPE_ORDER = list(INST_TYPE_SHORT.keys())
+
+if active_sheet == "Bills Pay Participants":
+    st.markdown("🟢 = QR Enabled")
+    st.markdown("")
+
+for inst_type in INST_TYPE_ORDER:
+
+    block = dff[dff["Institution Type"] == inst_type]
+
+    if block.empty:
+        continue
+
+    display_inst_type = (
+        inst_type
+        .replace("Universal and Commercial Banks (U/KBs)", "Universal and Commercial Banks (UKBs)")
+        .replace("Rural Banks", "Rural and Cooperative Banks")
+        .replace("Digital Banks", "Digital Banks (DBs)")
+    )
+
+    st.markdown(f"## {display_inst_type}")
+
+    # ==========================================================
+    # FULL TAB TABLE
+    # ==========================================================
+    if active_sheet == "Bills Pay Participants (Full)":
+
+        table = (
+            block[
+                ["Institution",
+                 "QR Sender", "QR Receiver",
+                 "Non-QR Sender", "Non-QR Receiver"]
+            ]
+            .sort_values("Institution")
+            .reset_index(drop=True)
+        )
+
+        for col in ["QR Sender", "QR Receiver", "Non-QR Sender", "Non-QR Receiver"]:
+            table[col] = table[col].astype(str).str.upper().apply(
+                lambda x: "✅" if x == "TRUE" else "❌"
+            )
+
+        table.index = table.index + 1
+
+        st.dataframe(
+            table,
+            use_container_width=True,
+            hide_index=False,
+            height=min(500, 35 * len(table) + 35)
+        )
+
+        st.divider()
+        continue
+
+    # ==========================================================
+    # NORMAL TAB TABLES
+    # ==========================================================
+    if active_sheet.lower().startswith("egov"):
+        ROLE_MAP = {
+            "Issuer": "ISSUING BANKS",
+            "Acquirer": "ACQUIRING BANKS",
+        }
+    else:
+        ROLE_MAP = {
+            "Sender/Receiver": "SENDER/RECEIVER",
+            "Sender Only": "SENDER ONLY",
+            "Receiver Only": "RECEIVER ONLY",
+        }
+
+    for role_value, role_label in ROLE_MAP.items():
+
+        role_block = block[block["Category"] == role_value]
+
+        if role_block.empty:
+            continue
+
+        st.markdown(f"**{role_label}**")
+
+        if active_sheet == "Bills Pay Participants" and "QR Enabled" in role_block.columns:
+
+            table = (
+                role_block[["Institution", "QR Enabled"]]
+                .sort_values("Institution")
+                .reset_index(drop=True)
+            )
+
+            table["QR Enabled"] = table["QR Enabled"].astype(str).str.lower().apply(
+                lambda x: "🟢" if x == "true" else ""
+            )
+
+            table.index = table.index + 1
+
+        else:
+            table = (
+                role_block[["Institution"]]
+                .sort_values("Institution")
+                .reset_index(drop=True)
+            )
+            table.index = table.index + 1
+
+        st.dataframe(
+            table,
+            use_container_width=True,
+            hide_index=False,
+            height=min(400, 35 * len(table) + 35)
+        )
+
+    st.divider()
+
+# =========================
+# Footer
+# =========================
+st.caption("Source: BancNet / PCHC")
