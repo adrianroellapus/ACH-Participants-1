@@ -15,46 +15,41 @@ st.set_page_config(
 )
 
 # =========================
-# Stronger table borders (light + dark mode)
+# Stronger table borders
 # =========================
 st.markdown("""
 <style>
-
-/* Make dataframe borders clearly visible */
 [data-testid="stDataFrame"] table {
     border-collapse: collapse !important;
 }
-
 [data-testid="stDataFrame"] th,
 [data-testid="stDataFrame"] td {
     border: 1px solid rgba(128,128,128,0.6) !important;
 }
-
-/* Slightly stronger header border */
 [data-testid="stDataFrame"] thead th {
     border-bottom: 2px solid rgba(128,128,128,0.9) !important;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
 DATA_FILE = Path("ACHdata.xlsx")
 
 # =========================
-# Load Excel (row-level)
+# Load Excel
 # =========================
 @st.cache_data
 def load_participant_sheets(
     xlsx_path: Path,
     mtime: float
 ) -> Dict[str, Tuple[str, pd.DataFrame]]:
+
     xls = pd.ExcelFile(xlsx_path, engine="openpyxl")
     data = {}
 
     for sheet in xls.sheet_names:
+
         if "Participants" not in sheet:
             continue
-
 
         raw = pd.read_excel(xlsx_path, sheet_name=sheet, header=None)
 
@@ -72,7 +67,6 @@ def load_participant_sheets(
             subtitle = f"as of {m.group(1)}"
 
         headers = raw.iloc[1].astype(str).str.strip().tolist()
-
         df = raw.iloc[2:].copy()
         df.columns = headers
         df = df.dropna(how="all")
@@ -106,16 +100,16 @@ active_sheet = st.radio(
 subtitle, df = sheets_data[active_sheet]
 
 # =========================
-# PASSWORD FOR QR Ph P2M TAB ONLY
+# PASSWORD FOR Bills Pay Participants (Full)
 # =========================
 APP_PASSWORD = os.getenv("APP_PASSWORD", "GovAdrian")
 
 if active_sheet == "Bills Pay Participants (Full)":
 
-    if "qr_authenticated" not in st.session_state:
-        st.session_state.qr_authenticated = False
+    if "bills_full_authenticated" not in st.session_state:
+        st.session_state.bills_full_authenticated = False
 
-    if not st.session_state.qr_authenticated:
+    if not st.session_state.bills_full_authenticated:
         st.warning("🔐 This tab is password protected")
 
         password = st.text_input(
@@ -124,7 +118,7 @@ if active_sheet == "Bills Pay Participants (Full)":
         )
 
         if password == APP_PASSWORD:
-            st.session_state.qr_authenticated = True
+            st.session_state.bills_full_authenticated = True
             st.rerun()
         elif password:
             st.error("Incorrect password")
@@ -150,6 +144,7 @@ st.subheader(active_sheet)
 # Sidebar filters
 # =========================
 with st.sidebar:
+
     st.markdown(f"### {active_sheet} Filters")
 
     if "Category" in df.columns:
@@ -227,6 +222,30 @@ elif search:
 st.divider()
 
 # =========================
+# Helper for QR rendering
+# =========================
+def render_institution_list(role_block, show_qr=False):
+
+    html = ""
+    sorted_block = role_block.sort_values("Institution").reset_index(drop=True)
+
+    for i, row in sorted_block.iterrows():
+        name = row["Institution"]
+        qr_icon = ""
+
+        if show_qr and "QR Enabled" in sorted_block.columns:
+            if str(row["QR Enabled"]).strip().lower() == "true":
+                qr_icon = (
+                    '<img src="qrph.png" '
+                    'style="height:18px; margin-left:8px; vertical-align:middle;">'
+                )
+
+        html += f"<div>{i+1}. {name}{qr_icon}</div>"
+
+    return html
+
+
+# =========================
 # PDF-style layout
 # =========================
 INST_TYPE_ORDER = list(INST_TYPE_SHORT.keys())
@@ -244,6 +263,7 @@ else:
     }
 
 for inst_type in INST_TYPE_ORDER:
+
     block = dff[dff["Institution Type"] == inst_type]
 
     if block.empty:
@@ -251,14 +271,15 @@ for inst_type in INST_TYPE_ORDER:
 
     display_inst_type = (
         inst_type
-            .replace("Universal and Commercial Banks (U/KBs)", "Universal and Commercial Banks (UKBs)")
-            .replace("Rural Banks", "Rural and Cooperative Banks")
-            .replace("Digital Banks", "Digital Banks (DBs)")
+        .replace("Universal and Commercial Banks (U/KBs)", "Universal and Commercial Banks (UKBs)")
+        .replace("Rural Banks", "Rural and Cooperative Banks")
+        .replace("Digital Banks", "Digital Banks (DBs)")
     )
 
     st.markdown(f"## {display_inst_type}")
 
     for role_value, role_label in ROLE_MAP.items():
+
         role_block = block[block["Category"] == role_value]
 
         if role_block.empty:
@@ -266,19 +287,24 @@ for inst_type in INST_TYPE_ORDER:
 
         st.markdown(f"**{role_label}**")
 
-        table = (
-            role_block[["Institution"]]
-            .sort_values("Institution")
-            .reset_index(drop=True)
-        )
-        table.index = table.index + 1
+        # QR logic ONLY for Bills Pay Participants
+        if active_sheet == "Bills Pay Participants" and "QR Enabled" in role_block.columns:
+            html_block = render_institution_list(role_block, show_qr=True)
+            st.markdown(html_block, unsafe_allow_html=True)
+        else:
+            table = (
+                role_block[["Institution"]]
+                .sort_values("Institution")
+                .reset_index(drop=True)
+            )
+            table.index = table.index + 1
 
-        st.dataframe(
-            table,
-            use_container_width=True,
-            hide_index=False,
-            height=min(400, 35 * len(table) + 35)
-        )
+            st.dataframe(
+                table,
+                use_container_width=True,
+                hide_index=False,
+                height=min(400, 35 * len(table) + 35)
+            )
 
     st.divider()
 
