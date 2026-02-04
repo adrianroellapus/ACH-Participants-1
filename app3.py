@@ -183,7 +183,7 @@ INST_TYPE_SHORT = {
 }
 
 # =========================
-# SUMMARY — FULL TAB FIXED
+# SUMMARY — FULL TAB (INDEPENDENT QR/NON-QR LOGIC)
 # =========================
 if active_sheet == "Bills Pay Participants (Full)" and not search:
 
@@ -199,49 +199,50 @@ if active_sheet == "Bills Pay Participants (Full)" and not search:
 
         temp = dff.copy()
 
-        # Normalize to boolean properly
+        # Normalize booleans properly
         for col in ["QR Sender", "QR Receiver", "Non-QR Sender", "Non-QR Receiver"]:
             temp[col] = temp[col].astype(str).str.upper().eq("TRUE")
 
-        def determine_category(row):
+        records = []
+
+        for _, row in temp.iterrows():
+
+            inst_type = row["Institution Type"]
+
             qr_s = row["QR Sender"]
             qr_r = row["QR Receiver"]
             nqr_s = row["Non-QR Sender"]
             nqr_r = row["Non-QR Receiver"]
 
+            # QR categories
             if qr_s and qr_r:
-                return "QR Sender/Receiver"
+                records.append(("QR Sender/Receiver", inst_type))
             if qr_s and not qr_r:
-                return "QR Sender Only"
+                records.append(("QR Sender Only", inst_type))
             if not qr_s and qr_r:
-                return "QR Receiver Only"
+                records.append(("QR Receiver Only", inst_type))
+
+            # NON-QR categories (independent!)
             if nqr_s and nqr_r:
-                return "Non-QR Sender/Receiver"
+                records.append(("Non-QR Sender/Receiver", inst_type))
             if nqr_s and not nqr_r:
-                return "Non-QR Sender Only"
+                records.append(("Non-QR Sender Only", inst_type))
             if not nqr_s and nqr_r:
-                return "Non-QR Receiver Only"
-            return None
+                records.append(("Non-QR Receiver Only", inst_type))
 
-        temp["QR Category"] = temp.apply(determine_category, axis=1)
-        temp = temp.dropna(subset=["QR Category"])
+        summary_df = pd.DataFrame(records, columns=["QR Category", "Institution Type"])
 
-        summary = (
-            temp.groupby(["QR Category", "Institution Type"])
-            .size()
-            .reset_index(name="Count")
-        )
-
-        pivot = summary.pivot_table(
+        pivot = summary_df.pivot_table(
             index="QR Category",
             columns="Institution Type",
-            values="Count",
-            aggfunc="sum",
+            aggfunc="size",
             fill_value=0
         )
 
         pivot = pivot.rename(columns=INST_TYPE_SHORT)
-        pivot = pivot[[c for c in INST_TYPE_SHORT.values() if c in pivot.columns]]
+
+        ordered_cols = [c for c in INST_TYPE_SHORT.values() if c in pivot.columns]
+        pivot = pivot[ordered_cols]
 
         pivot["TOTAL"] = pivot.sum(axis=1)
 
@@ -256,43 +257,8 @@ if active_sheet == "Bills Pay Participants (Full)" and not search:
 
         st.divider()
 
-elif not search and {"Category", "Institution Type"}.issubset(dff.columns):
-
-    summary = (
-        dff.groupby(["Category", "Institution Type"])
-        .size()
-        .reset_index(name="Count")
-    )
-
-    pivot = summary.pivot_table(
-        index="Category",
-        columns="Institution Type",
-        values="Count",
-        aggfunc="sum",
-        fill_value=0
-    )
-
-    pivot = pivot.rename(columns=INST_TYPE_SHORT)
-    pivot = pivot[[c for c in INST_TYPE_SHORT.values() if c in pivot.columns]]
-
-    pivot["TOTAL"] = pivot.sum(axis=1)
-
-    total_row = pivot.sum(axis=0).to_frame().T
-    total_row.index = ["TOTAL"]
-    pivot = pd.concat([pivot, total_row])
-
-    pivot = pivot.replace(0, "–")
-
-    st.markdown("### Summary by Institution Type and Category")
-    st.dataframe(pivot, use_container_width=True)
-
-    st.divider()
-
-elif search:
-    st.info("Summary hidden while searching. Clear search to restore summary.")
-
 # =========================
-# FULL TAB TABLE (5 columns)
+# FULL TAB TABLE (5-column with ✅ ❌)
 # =========================
 if active_sheet == "Bills Pay Participants (Full)":
 
@@ -303,7 +269,13 @@ if active_sheet == "Bills Pay Participants (Full)":
         if block.empty:
             continue
 
-        st.markdown(f"## {inst_type.replace('(U/KBs)', '(UKBs)')}")
+        display_inst_type = (
+            inst_type
+            .replace("(U/KBs)", "(UKBs)")
+            .replace("Rural Banks", "Rural and Cooperative Banks")
+        )
+
+        st.markdown(f"## {display_inst_type}")
 
         table = (
             block[[
